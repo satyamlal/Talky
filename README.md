@@ -13,8 +13,8 @@ Whether you want to chat globally, connect in small groups, or run quick live po
 
 ## Tech Stack
 
-- **Frontend:** React + Vite + TypeScript
-- **Backend:** Node.js + Express + TypeScript
+- **Frontend (client):** React + Vite + TypeScript
+- **Backend (server):** Node.js + Express + TypeScript
 - **Real-time:** [WebSockets](https://github.com/websockets/ws)
 
 ## Getting Started
