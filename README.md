@@ -21,8 +21,8 @@ Whether you want to chat globally, connect in small groups, or run quick live po
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/talky.git
-cd talky
+git clone https://github.com/satyamlal/Talky.git
+cd Talky
 
 # Install dependencies (root)
 pnpm install
