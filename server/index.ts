@@ -7,6 +7,7 @@ interface User {
   room: string;
 }
 
+let userCount = 0;
 let allSockets: User[] = [];
 
 wss.on("connection", (socket, req) => {
@@ -18,6 +19,14 @@ wss.on("connection", (socket, req) => {
         socket,
         room: parsedMessage.payload.roomId,
       });
+      userCount++;
+      socket.send("User #" + userCount + " connected!");
+      socket.send(
+        "User #" +
+          userCount +
+          " connected to room " +
+          parsedMessage.payload.roomId
+      );
     }
 
     if (parsedMessage.type == "chat") {
@@ -31,6 +40,7 @@ wss.on("connection", (socket, req) => {
     }
 
     socket.on("close", () => {
+      userCount--;
       allSockets = allSockets.filter((x) => x.socket != socket);
     });
   });
