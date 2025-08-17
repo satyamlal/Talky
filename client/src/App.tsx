@@ -23,6 +23,9 @@ function App() {
         })
       );
     };
+    return () => {
+      ws.close();
+    };
   }, []);
   return (
     <div
