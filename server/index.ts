@@ -33,9 +33,6 @@ wss.on("connection", (socket, req) => {
           room: parsedMessage.payload.roomId,
         });
         socket.send("User #" + userCount + " connected!");
-        socket.send(
-          "User #" + userCount + " Joined Room " + parsedMessage.payload.roomId
-        );
       }
     }
 
