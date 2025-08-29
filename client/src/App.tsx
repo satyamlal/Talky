@@ -1,26 +1,73 @@
 import { useEffect, useState, useRef } from "react";
 import "./App.css";
 
+interface ChatMessage {
+  type: "chat";
+  message: string;
+  userId: string;
+  color: string;
+  timestamp: string;
+}
+
+interface SystemMessage {
+  type: "system";
+  message: string;
+  userId?: string;
+  color?: string;
+}
+
+type Message = ChatMessage | SystemMessage;
+
 function App() {
-  const [messages, setMessages] = useState<string[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // const scrollToBottom = () => {
-  //   messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  // };
+  const scrollToBottom = (): void => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    const wsUrl =
-      import.meta.env.VITE_WS_URL || "wss://talky-1ftp.onrender.com";
-    const ws = new WebSocket(wsUrl);
+    scrollToBottom();
+    // last message color
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      console.log("Last message:", lastMessage);
+      if (lastMessage.type === "chat") {
+        console.log("Message color:", lastMessage.color);
+      }
+    }
+  }, [messages]);
 
-    ws.onmessage = (event) => {
-      setMessages((m) => [...m, event.data]);
+  useEffect(() => {
+    const wsUrl: string =
+      import.meta.env.VITE_WS_URL ||
+      (import.meta.env.DEV
+        ? "ws://localhost:8080"
+        : "wss://talky-1ftp.onrender.com");
+
+    console.log("Connecting to:", wsUrl);
+    const ws: WebSocket = new WebSocket(wsUrl);
+
+    ws.onmessage = (event: MessageEvent) => {
+      console.log("Raw message received:", event.data);
+      try {
+        const parsedMessage: Message = JSON.parse(event.data);
+        console.log("Parsed message:", parsedMessage);
+        setMessages((m) => [...m, parsedMessage]);
+      } catch (error) {
+        console.error("Failed to parse message:", error);
+
+        const systemMessage: SystemMessage = {
+          type: "system",
+          message: event.data,
+        };
+        setMessages((m) => [...m, systemMessage]);
+      }
     };
 
-    ws.onopen = () => {
+    ws.onopen = (): void => {
       console.log("WebSocket connected!");
       ws.send(
         JSON.stringify({
@@ -32,22 +79,22 @@ function App() {
       );
     };
 
-    ws.onerror = (error) => {
+    ws.onerror = (error: Event): void => {
       console.error("WebSocket error:", error);
     };
 
-    ws.onclose = (event) => {
+    ws.onclose = (event: CloseEvent): void => {
       console.log("WebSocket closed:", event.code, event.reason);
     };
 
     wsRef.current = ws;
 
-    return () => {
+    return (): void => {
       ws.close();
     };
   }, []);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = (): void => {
     if (!inputMessage.trim()) return;
 
     wsRef.current?.send(
@@ -61,15 +108,35 @@ function App() {
     setInputMessage("");
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === "Enter") {
       handleSendMessage();
     }
   };
 
+  const getMessageStyle = (message: Message): React.CSSProperties => {
+    if (message.type === "chat") {
+      return {
+        backgroundColor: message.color + "40", // 40 = 25% opacity
+        borderLeftColor: message.color,
+        borderLeftWidth: "4px",
+        borderLeftStyle: "solid",
+      };
+    } else if (message.type === "system" && message.color) {
+      // Styling system messages with user colors too
+      return {
+        backgroundColor: message.color + "20", // 20 == 12% opacity
+        borderLeftColor: message.color,
+        borderLeftWidth: "2px",
+        borderLeftStyle: "solid",
+      };
+    }
+    return {};
+  };
+
   return (
     <div
-      className="h-screen w-full flex flex-col bg-black relative"
+      className="h-screen w-full flex flex-col bg-black relative border border-[#25304a] rounded-3xl"
       style={{
         backgroundImage: `
           linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
@@ -78,12 +145,8 @@ function App() {
         backgroundSize: "20px 20px",
       }}
     >
-      <div className="absolute inset-0 bg-slate-950 -z-10 h-auto w-full items-center px-5 py-24"></div>
-      {/* Subtle overlay for better text readability */}
-      <div className="absolute inset-0 bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none"></div>
-
       {/* Header */}
-      <div className="relative z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-b border-gray-700 px-6 py-4">
+      <div className="relative rounded-3xl z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-b border-gray-700 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-white">Chat Room</h1>
@@ -101,7 +164,7 @@ function App() {
         <div className="max-w-4xl mx-auto space-y-4">
           {messages.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-gray-500 text-4xl mb-4">💬</div>
+              <div className="text-gray-500 text-4xl mb-4 ">💬</div>
               <p className="text-gray-400 text-lg">No messages yet</p>
               <p className="text-gray-500 text-sm">Start the conversation!</p>
             </div>
@@ -109,15 +172,27 @@ function App() {
             messages.map((message, index) => (
               <div key={index} className="flex justify-start">
                 <div className="max-w-xs lg:max-w-md">
-                  <div className="bg-gray-800 bg-opacity-90 backdrop-blur-sm rounded-2xl rounded-tl-md shadow-lg px-4 py-3 border border-gray-700">
+                  <div
+                    className={`backdrop-blur-sm rounded-2xl rounded-tl-md shadow-lg px-4 py-3 border-l-4 ${
+                      message.type === "system"
+                        ? "bg-gray-800 bg-opacity-90 border-gray-600"
+                        : "border-gray-700"
+                    }`}
+                    style={getMessageStyle(message)}
+                  >
                     <p className="text-gray-100 text-sm leading-relaxed">
-                      {message}
+                      {message.message}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {new Date().toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                    <p className="text-xs text-gray-400 mt-1 flex">
+                      {message.type === "chat"
+                        ? new Date(message.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : new Date().toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                     </p>
                   </div>
                 </div>
@@ -129,15 +204,17 @@ function App() {
       </div>
 
       {/* Input Area */}
-      <div className="relative z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-t border-gray-700 px-4 py-4">
-        <div className="max-w-4xl mx-auto">
+      <div className="relative rounded-3xl z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-t border-gray-700 px-4 py-4">
+        <div className="max-w-4xl mx-auto rounded-3xl ">
           <div className="flex items-end space-x-3">
             <div className="flex-1">
               <div className="relative">
                 <input
                   type="text"
                   value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setInputMessage(e.target.value)
+                  }
                   onKeyPress={handleKeyPress}
                   placeholder="Type your message..."
                   className="w-full px-4 py-3 pr-12 text-white placeholder-gray-400 bg-gray-800 bg-opacity-80 border border-gray-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm transition-all duration-200"

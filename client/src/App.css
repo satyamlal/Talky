@@ -5,5 +5,7 @@
   text-align: center;
 }
 body {
-  background-color: #242424;
+  background-color: #000000;
+  background-image: radial-gradient(#ffffff33 1px, #070707 1px);
+  background-size: 20px 20px;
 }
