@@ -7,24 +7,21 @@ function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  // const scrollToBottom = () => {
+  //   messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // };
 
   useEffect(() => {
     const wsUrl =
-      import.meta.env.VITE_WS_URL || "https://talky-1ftp.onrender.com";
+      import.meta.env.VITE_WS_URL || "wss://talky-1ftp.onrender.com";
     const ws = new WebSocket(wsUrl);
 
     ws.onmessage = (event) => {
       setMessages((m) => [...m, event.data]);
     };
-    wsRef.current = ws;
+
     ws.onopen = () => {
+      console.log("WebSocket connected!");
       ws.send(
         JSON.stringify({
           type: "join",
@@ -34,6 +31,17 @@ function App() {
         })
       );
     };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    ws.onclose = (event) => {
+      console.log("WebSocket closed:", event.code, event.reason);
+    };
+
+    wsRef.current = ws;
+
     return () => {
       ws.close();
     };
