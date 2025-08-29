@@ -71,13 +71,12 @@ function App() {
       {/* Subtle overlay for better text readability */}
       <div className="absolute inset-0 bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none"></div>
       
-      
       {/* Header */}
       <div className="relative z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-b border-gray-700 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-white">Chat Room</h1>
-            <p className="text-sm text-gray-400">Room: Red</p>
+            <p className="text-sm text-gray-400 pl-6">Topic : WebSockets</p>
           </div>
           <div className="flex items-center space-x-2">
             <div className="h-3 w-3 bg-green-400 rounded-full animate-pulse"></div>
