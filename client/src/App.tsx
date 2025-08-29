@@ -16,7 +16,10 @@ function App() {
   }, [messages]);
 
   useEffect(() => {
-    const ws = new WebSocket("http://localhost:8080");
+    const wsUrl =
+      import.meta.env.VITE_WS_URL || "wss://talky-v8no.onrender.com";
+    const ws = new WebSocket(wsUrl);
+
     ws.onmessage = (event) => {
       setMessages((m) => [...m, event.data]);
     };
@@ -38,7 +41,7 @@ function App() {
 
   const handleSendMessage = () => {
     if (!inputMessage.trim()) return;
-    
+
     wsRef.current?.send(
       JSON.stringify({
         type: "chat",
@@ -51,13 +54,13 @@ function App() {
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       handleSendMessage();
     }
   };
 
   return (
-    <div 
+    <div
       className="h-screen w-full flex flex-col bg-black relative"
       style={{
         backgroundImage: `
@@ -70,7 +73,7 @@ function App() {
       <div className="absolute inset-0 bg-slate-950 -z-10 h-auto w-full items-center px-5 py-24"></div>
       {/* Subtle overlay for better text readability */}
       <div className="absolute inset-0 bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none"></div>
-      
+
       {/* Header */}
       <div className="relative z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-b border-gray-700 px-6 py-4">
         <div className="flex items-center justify-between">
@@ -99,9 +102,14 @@ function App() {
               <div key={index} className="flex justify-start">
                 <div className="max-w-xs lg:max-w-md">
                   <div className="bg-gray-800 bg-opacity-90 backdrop-blur-sm rounded-2xl rounded-tl-md shadow-lg px-4 py-3 border border-gray-700">
-                    <p className="text-gray-100 text-sm leading-relaxed">{message}</p>
+                    <p className="text-gray-100 text-sm leading-relaxed">
+                      {message}
+                    </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date().toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </p>
                   </div>
                 </div>
@@ -133,8 +141,18 @@ function App() {
               disabled={!inputMessage.trim()}
               className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white rounded-full transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900 shadow-lg"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
               </svg>
             </button>
           </div>
