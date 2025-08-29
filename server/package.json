@@ -5,8 +5,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc -b",
+    "build": "npm install && npm run build",
     "dev": "nodemon --watch ./ --ext ts --exec ts-node index.ts"
   },
   "keywords": [],

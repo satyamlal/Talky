@@ -58,7 +58,7 @@ function App() {
 
   return (
     <div 
-      className="h-screen flex flex-col bg-black relative"
+      className="h-screen w-full flex flex-col bg-black relative"
       style={{
         backgroundImage: `
           linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
@@ -67,8 +67,10 @@ function App() {
         backgroundSize: "20px 20px",
       }}
     >
+      <div className="absolute inset-0 bg-slate-950 -z-10 h-auto w-full items-center px-5 py-24"></div>
       {/* Subtle overlay for better text readability */}
-      <div className="absolute inset-0 bg-black bg-opacity-20 pointer-events-none"></div>
+      <div className="absolute inset-0 bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none"></div>
+      
       
       {/* Header */}
       <div className="relative z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-b border-gray-700 px-6 py-4">
