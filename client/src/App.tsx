@@ -17,7 +17,7 @@ function App() {
 
   useEffect(() => {
     const wsUrl =
-      import.meta.env.VITE_WS_URL || "wss://talky-v8no.onrender.com";
+      import.meta.env.VITE_WS_URL || "https://talky-1ftp.onrender.com";
     const ws = new WebSocket(wsUrl);
 
     ws.onmessage = (event) => {
