@@ -2,7 +2,11 @@ import { WebSocketServer, WebSocket } from "ws";
 import { createServer } from "http";
 
 const server = createServer();
-const wss = new WebSocketServer({ port: 8080 });
+
+const PORT = process.env.PORT || 8080;
+
+// WebSocket server attached to HTTP server
+const wss = new WebSocketServer({ server });
 
 interface User {
   socket: WebSocket;
@@ -13,8 +17,11 @@ let userCount = 0;
 let allSockets: User[] = [];
 
 wss.on("connection", (socket, req) => {
+  console.log("New WebSocket connection established");
   userCount++;
+
   socket.on("message", (message) => {
+    console.log("Received message:", message.toString());
     const parsedMessage = JSON.parse(message as unknown as string);
 
     if (parsedMessage.type == "join") {
@@ -40,6 +47,7 @@ wss.on("connection", (socket, req) => {
 
     if (parsedMessage.type == "chat") {
       let currentUserRoom = allSockets.find((x) => x.socket === socket)?.room;
+      console.log(`Broadcasting message to room: ${currentUserRoom}`);
 
       allSockets.forEach((user) => {
         if (user.room == currentUserRoom) {
@@ -48,13 +56,19 @@ wss.on("connection", (socket, req) => {
       });
     }
   });
+
   socket.on("close", () => {
+    console.log("WebSocket connection closed");
     userCount--;
     allSockets = allSockets.filter((x) => x.socket != socket);
   });
+
+  socket.on("error", (error) => {
+    console.error("WebSocket error:", error);
+  });
 });
 
-// const PORT = process.env.PORT || 8080;
-// server.listen(PORT, () => {
-//   console.log(`Server running on port ${PORT}`);
-// });
+// Start the HTTP server
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
