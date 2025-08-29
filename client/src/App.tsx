@@ -2,10 +2,10 @@ import { useEffect, useState, useRef } from "react";
 import "./App.css";
 
 function App() {
-  const [messages, setMessages] = useState([]);
-  const [inputMessage, setInputMessage] = useState("");
-  const messagesEndRef = useRef(null);
-  const wsRef = useRef();
+  const [messages, setMessages] = useState<string[]>([]);
+  const [inputMessage, setInputMessage] = useState<string>("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -53,7 +53,7 @@ function App() {
     setInputMessage("");
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleSendMessage();
     }
