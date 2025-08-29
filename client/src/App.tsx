@@ -5,6 +5,7 @@ interface ChatMessage {
   type: "chat";
   message: string;
   userId: string;
+  username: string;
   color: string;
   timestamp: string;
 }
@@ -16,11 +17,19 @@ interface SystemMessage {
   color?: string;
 }
 
-type Message = ChatMessage | SystemMessage;
+interface UserCountMessage {
+  type: "userCount";
+  count: number;
+}
+
+type Message = ChatMessage | SystemMessage | UserCountMessage;
 
 function App() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<(ChatMessage | SystemMessage)[]>([]);
   const [inputMessage, setInputMessage] = useState<string>("");
+  const [userCount, setUserCount] = useState<number>(0);
+  const [connectionStatus, setConnectionStatus] =
+    useState<string>("Connecting...");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -30,14 +39,6 @@ function App() {
 
   useEffect(() => {
     scrollToBottom();
-    // last message color
-    if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      console.log("Last message:", lastMessage);
-      if (lastMessage.type === "chat") {
-        console.log("Message color:", lastMessage.color);
-      }
-    }
   }, [messages]);
 
   useEffect(() => {
@@ -47,28 +48,36 @@ function App() {
         ? "ws://localhost:8080"
         : "wss://talky-1ftp.onrender.com");
 
-    console.log("Connecting to:", wsUrl);
     const ws: WebSocket = new WebSocket(wsUrl);
 
     ws.onmessage = (event: MessageEvent) => {
-      console.log("Raw message received:", event.data);
       try {
         const parsedMessage: Message = JSON.parse(event.data);
-        console.log("Parsed message:", parsedMessage);
-        setMessages((m) => [...m, parsedMessage]);
+
+        if (parsedMessage.type === "userCount") {
+          setUserCount(parsedMessage.count);
+        } else if (
+          parsedMessage.type === "system" ||
+          parsedMessage.type === "chat"
+        ) {
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            parsedMessage as ChatMessage | SystemMessage,
+          ]);
+        }
       } catch (error) {
         console.error("Failed to parse message:", error);
-
         const systemMessage: SystemMessage = {
           type: "system",
           message: event.data,
         };
-        setMessages((m) => [...m, systemMessage]);
+        setMessages((prevMessages) => [...prevMessages, systemMessage]);
       }
     };
 
     ws.onopen = (): void => {
-      console.log("WebSocket connected!");
+      setConnectionStatus("Connected");
+
       ws.send(
         JSON.stringify({
           type: "join",
@@ -81,10 +90,12 @@ function App() {
 
     ws.onerror = (error: Event): void => {
       console.error("WebSocket error:", error);
+      setConnectionStatus("Connection Error");
     };
 
-    ws.onclose = (event: CloseEvent): void => {
-      console.log("WebSocket closed:", event.code, event.reason);
+    ws.onclose = (): void => {
+      setConnectionStatus("Disconnected");
+      setUserCount(0);
     };
 
     wsRef.current = ws;
@@ -114,21 +125,20 @@ function App() {
     }
   };
 
-  const getMessageStyle = (message: Message): React.CSSProperties => {
-    if (message.type === "chat") {
+  const getMessageStyle = (
+    message: ChatMessage | SystemMessage
+  ): React.CSSProperties => {
+    const hexToRgba = (hex: string, alpha: number): string => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    if (message.type === "chat" && message.color) {
       return {
-        backgroundColor: message.color + "40", // 40 = 25% opacity
-        borderLeftColor: message.color,
-        borderLeftWidth: "4px",
-        borderLeftStyle: "solid",
-      };
-    } else if (message.type === "system" && message.color) {
-      // Styling system messages with user colors too
-      return {
-        backgroundColor: message.color + "20", // 20 == 12% opacity
-        borderLeftColor: message.color,
-        borderLeftWidth: "2px",
-        borderLeftStyle: "solid",
+        backgroundColor: hexToRgba(message.color, 0.25),
+        borderLeft: `4px solid ${message.color}`,
       };
     }
     return {};
@@ -146,15 +156,24 @@ function App() {
       }}
     >
       {/* Header */}
-      <div className="relative rounded-3xl z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-b border-gray-700 px-6 py-4">
+      <div className="relative m-2 rounded-2xl z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-b border-gray-700 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-white">Chat Room</h1>
             <p className="text-sm text-gray-400 pl-6">Topic : WebSockets</p>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="h-3 w-3 bg-green-400 rounded-full animate-pulse"></div>
-            <span className="text-sm text-gray-300">Online</span>
+            <div
+              className={`h-3 w-3 rounded-full ${
+                connectionStatus === "Connected" && userCount > 0
+                  ? "bg-green-400 animate-pulse"
+                  : connectionStatus === "Connected"
+                  ? "bg-yellow-400"
+                  : "bg-red-400"
+              }`}
+            ></div>
+
+            <span className="text-sm text-gray-300">online : {userCount}</span>
           </div>
         </div>
       </div>
@@ -167,23 +186,38 @@ function App() {
               <div className="text-gray-500 text-4xl mb-4 ">💬</div>
               <p className="text-gray-400 text-lg">No messages yet</p>
               <p className="text-gray-500 text-sm">Start the conversation!</p>
+
+              {userCount > 0 && (
+                <p className="text-gray-500 text-xs mt-2">
+                  {userCount} {userCount === 1 ? "person is" : "people are"} in
+                  this room
+                </p>
+              )}
             </div>
           ) : (
             messages.map((message, index) => (
               <div key={index} className="flex justify-start">
                 <div className="max-w-xs lg:max-w-md">
                   <div
-                    className={`backdrop-blur-sm rounded-2xl rounded-tl-md shadow-lg px-4 py-3 border-l-4 ${
+                    className={`backdrop-blur-sm rounded-2xl rounded-tl-md shadow-lg px-4 py-3 ${
                       message.type === "system"
-                        ? "bg-gray-800 bg-opacity-90 border-gray-600"
-                        : "border-gray-700"
+                        ? "bg-gray-800 bg-opacity-90"
+                        : "bg-gray-800 bg-opacity-70"
                     }`}
                     style={getMessageStyle(message)}
                   >
+                    {message.type === "chat" && (
+                      <p
+                        className="text-xs font-semibold mb-1"
+                        style={{ color: message.color }}
+                      >
+                        {message.username}
+                      </p>
+                    )}
                     <p className="text-gray-100 text-sm leading-relaxed">
                       {message.message}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1 flex">
+                    <p className="text-xs text-gray-400 mt-1">
                       {message.type === "chat"
                         ? new Date(message.timestamp).toLocaleTimeString([], {
                             hour: "2-digit",
@@ -204,7 +238,7 @@ function App() {
       </div>
 
       {/* Input Area */}
-      <div className="relative rounded-3xl z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-t border-gray-700 px-4 py-4">
+      <div className="relative m-2 rounded-2xl z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-t border-gray-700 px-4 py-4">
         <div className="max-w-4xl mx-auto rounded-3xl ">
           <div className="flex items-end space-x-3">
             <div className="flex-1">
@@ -218,12 +252,15 @@ function App() {
                   onKeyPress={handleKeyPress}
                   placeholder="Type your message..."
                   className="w-full px-4 py-3 pr-12 text-white placeholder-gray-400 bg-gray-800 bg-opacity-80 border border-gray-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm transition-all duration-200"
+                  disabled={connectionStatus !== "Connected"}
                 />
               </div>
             </div>
             <button
               onClick={handleSendMessage}
-              disabled={!inputMessage.trim()}
+              disabled={
+                !inputMessage.trim() || connectionStatus !== "Connected"
+              }
               className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white rounded-full transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900 shadow-lg"
             >
               <svg
