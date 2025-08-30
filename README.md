@@ -24,12 +24,19 @@ Whether you want to chat globally, connect in small groups, or run quick live po
 git clone https://github.com/satyamlal/Talky.git
 cd Talky
 
-# Install dependencies (root)
+# Running FrontEnd :
+cd client
+
+## Install dependencies
 pnpm install
 
-# Run server
-pnpm dev:server
+## Start client on localhost
+pnpm run dev
 
-# Run client
-pnpm dev:client
+
+# Running BackEnd :
+cd server
+
+# Run server
+pnpm run dev
 ```
