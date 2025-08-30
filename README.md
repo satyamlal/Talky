@@ -37,6 +37,9 @@ pnpm run dev
 # Running BackEnd :
 cd server
 
+## Install dependencies
+pnpm install
+
 # Run server
 pnpm run dev
 ```
