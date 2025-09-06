@@ -279,7 +279,29 @@ function App() {
                 disabled={
                   !inputMessage.trim() || connectionStatus !== "Connected"
                 }
-                className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white rounded-full transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900 shadow-lg"
+                className="flex items-center justify-center w-12 h-12 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white rounded-full transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 shadow-lg"
+                style={{
+                  background:
+                    connectionStatus === "Connected" && inputMessage.trim()
+                      ? `linear-gradient(135deg, ${userColor}dd, ${userColor}aa)`
+                      : "#4b5563",
+                  boxShadow:
+                    connectionStatus === "Connected" && inputMessage.trim()
+                      ? `0 4px 14px 0 ${userColor}40, 0 0 0 2px ${userColor}20`
+                      : "0 4px 14px 0 rgba(75, 85, 99, 0.4)",
+                }}
+                onMouseEnter={(e) => {
+                  if (connectionStatus === "Connected" && inputMessage.trim()) {
+                    e.currentTarget.style.background = `linear-gradient(135deg, ${userColor}, ${userColor}cc)`;
+                    e.currentTarget.style.boxShadow = `0 6px 20px 0 ${userColor}50, 0 0 0 2px ${userColor}30`;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (connectionStatus === "Connected" && inputMessage.trim()) {
+                    e.currentTarget.style.background = `linear-gradient(135deg, ${userColor}dd, ${userColor}aa)`;
+                    e.currentTarget.style.boxShadow = `0 4px 14px 0 ${userColor}40, 0 0 0 2px ${userColor}20`;
+                  }
+                }}
               >
                 <svg
                   className="w-5 h-5"
