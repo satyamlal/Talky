@@ -5,41 +5,39 @@ const server = createServer();
 const PORT = process.env.PORT || 8080;
 const wss = new WebSocketServer({ server });
 
-// Generate a unique color based on HSL color space
+// Generate a unique color
 const generateUniqueColor = (roomId: string): string => {
   const usersInRoom = allSockets.filter((user) => user.room === roomId);
   const usedColors = usersInRoom.map((user) => user.color);
-  
+
   let newColor: string;
   let attempts = 0;
   const maxAttempts = 100;
-  
+
   do {
-    // Generate random hue (0-360), high saturation (70-90%), medium lightness (45-75%)
     const hue = Math.floor(Math.random() * 360);
-    const saturation = Math.floor(Math.random() * 21) + 70; // 70-90%
-    const lightness = Math.floor(Math.random() * 31) + 45;  // 45-75%
-    
-    // Convert HSL to HEX
+    const saturation = Math.floor(Math.random() * 21) + 70;
+    const lightness = Math.floor(Math.random() * 31) + 45;
+
     newColor = hslToHex(hue, saturation, lightness);
     attempts++;
-    
-    // If we've tried too many times, just use the color (very unlikely to happen)
+
     if (attempts >= maxAttempts) break;
-    
   } while (usedColors.includes(newColor));
-  
+
   return newColor;
 };
 
-// Convert HSL to HEX color
+// Converting HSL to HEX color
 const hslToHex = (h: number, s: number, l: number): string => {
   l /= 100;
-  const a = s * Math.min(l, 1 - l) / 100;
+  const a = (s * Math.min(l, 1 - l)) / 100;
   const f = (n: number) => {
     const k = (n + h / 30) % 12;
     const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * color).toString(16).padStart(2, '0');
+    return Math.round(255 * color)
+      .toString(16)
+      .padStart(2, "0");
   };
   return `#${f(0)}${f(8)}${f(4)}`;
 };
@@ -144,10 +142,10 @@ wss.on("connection", (socket, req) => {
           (user) => user.room === parsedMessage.payload.roomId
         );
 
-        // Generate username based on current count + 1
+        // Generating username
         const username = `User-${usersInRoom.length + 1}`;
 
-        // Get color AFTER getting current users but BEFORE adding new user
+        // new color for new user
         const userColor = getNextAvailableColor(parsedMessage.payload.roomId);
 
         allSockets.push({
@@ -181,10 +179,8 @@ wss.on("connection", (socket, req) => {
       } else if (existingUser.room !== parsedMessage.payload.roomId) {
         const oldRoom = existingUser.room;
 
-        // Update room first
         existingUser.room = parsedMessage.payload.roomId;
 
-        // Get new color for the new room (after updating the room)
         existingUser.color = getNextAvailableColor(
           parsedMessage.payload.roomId
         );
