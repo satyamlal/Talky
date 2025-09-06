@@ -76,10 +76,30 @@ interface PingMessage {
 type MessageType = ChatMessage | JoinMessage | PingMessage;
 
 let allSockets: User[] = [];
-let globalUserCounter = 0;
 
 const generateUserId = (): string =>
   `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+
+const getNextAvailableUsername = (): string => {
+  const existingNumbers = allSockets
+    .map((user) => {
+      const match = user.username.match(/^User-(\d+)$/);
+      return match && match[1] ? parseInt(match[1]) : 0;
+    })
+    .filter((num) => num > 0)
+    .sort((a, b) => a - b);
+
+  let nextNumber = 1;
+  for (const num of existingNumbers) {
+    if (num === nextNumber) {
+      nextNumber++;
+    } else {
+      break;
+    }
+  }
+
+  return `User-${nextNumber}`;
+};
 
 const getNextAvailableColor = (roomId: string): string => {
   return generateUniqueColor(roomId);
@@ -137,9 +157,8 @@ wss.on("connection", (socket, req) => {
       if (!existingUser) {
         const userId = generateUserId();
 
-        // Increment global counter for unique username
-        globalUserCounter++;
-        const username = `User-${globalUserCounter}`;
+        // Get the next available username (reuses numbers from disconnected users)
+        const username = getNextAvailableUsername();
 
         // new color for new user
         const userColor = getNextAvailableColor(parsedMessage.payload.roomId);

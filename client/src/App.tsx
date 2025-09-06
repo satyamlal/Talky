@@ -262,7 +262,7 @@ function App() {
                     className="w-full px-4 py-3 pr-12 text-white placeholder-gray-400 bg-gray-800 bg-opacity-80 border-2 rounded-2xl focus:outline-none backdrop-blur-sm transition-all duration-200"
                     style={{
                       borderColor: userColor,
-                      boxShadow: `0 0 0 2px ${userColor}20`, // 20 is for transparency
+                      boxShadow: `0 0 0 2px ${userColor}20`,
                     }}
                     onFocus={(e) => {
                       e.target.style.boxShadow = `0 0 0 2px ${userColor}60`;
