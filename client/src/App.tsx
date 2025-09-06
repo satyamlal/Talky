@@ -39,10 +39,12 @@ function App() {
   const [inputMessage, setInputMessage] = useState<string>("");
   const [userCount, setUserCount] = useState<number>(0);
   const [userColor, setUserColor] = useState<string>("#6b7280"); // Default gray color
+  const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
   const [connectionStatus, setConnectionStatus] =
     useState<string>("Connecting...");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = (): void => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -51,6 +53,13 @@ function App() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto-focus input when connected
+  useEffect(() => {
+    if (connectionStatus === "Connected" && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [connectionStatus]);
 
   useEffect(() => {
     const wsUrl: string =
@@ -252,6 +261,7 @@ function App() {
               <div className="flex-1">
                 <div className="relative">
                   <input
+                    ref={inputRef}
                     type="text"
                     value={inputMessage}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -261,14 +271,16 @@ function App() {
                     placeholder="Type your message..."
                     className="w-full px-4 py-3 pr-12 text-white placeholder-gray-400 bg-gray-800 bg-opacity-80 border-2 rounded-2xl focus:outline-none backdrop-blur-sm transition-all duration-200"
                     style={{
-                      borderColor: userColor,
-                      boxShadow: `0 0 0 2px ${userColor}20`,
+                      borderColor: isInputFocused ? userColor : "#4b5563",
+                      boxShadow: isInputFocused
+                        ? `0 0 0 2px ${userColor}40`
+                        : "0 0 0 2px rgba(75, 85, 99, 0.2)",
                     }}
-                    onFocus={(e) => {
-                      e.target.style.boxShadow = `0 0 0 2px ${userColor}60`;
+                    onFocus={() => {
+                      setIsInputFocused(true);
                     }}
-                    onBlur={(e) => {
-                      e.target.style.boxShadow = `0 0 0 2px ${userColor}20`;
+                    onBlur={() => {
+                      setIsInputFocused(false);
                     }}
                     disabled={connectionStatus !== "Connected"}
                   />
@@ -282,22 +294,30 @@ function App() {
                 className="flex items-center justify-center w-12 h-12 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white rounded-full transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 shadow-lg"
                 style={{
                   background:
-                    connectionStatus === "Connected" && inputMessage.trim()
+                    connectionStatus === "Connected" &&
+                    (inputMessage.trim() || isInputFocused)
                       ? `linear-gradient(135deg, ${userColor}dd, ${userColor}aa)`
                       : "#4b5563",
                   boxShadow:
-                    connectionStatus === "Connected" && inputMessage.trim()
+                    connectionStatus === "Connected" &&
+                    (inputMessage.trim() || isInputFocused)
                       ? `0 4px 14px 0 ${userColor}40, 0 0 0 2px ${userColor}20`
                       : "0 4px 14px 0 rgba(75, 85, 99, 0.4)",
                 }}
                 onMouseEnter={(e) => {
-                  if (connectionStatus === "Connected" && inputMessage.trim()) {
+                  if (
+                    connectionStatus === "Connected" &&
+                    (inputMessage.trim() || isInputFocused)
+                  ) {
                     e.currentTarget.style.background = `linear-gradient(135deg, ${userColor}, ${userColor}cc)`;
                     e.currentTarget.style.boxShadow = `0 6px 20px 0 ${userColor}50, 0 0 0 2px ${userColor}30`;
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (connectionStatus === "Connected" && inputMessage.trim()) {
+                  if (
+                    connectionStatus === "Connected" &&
+                    (inputMessage.trim() || isInputFocused)
+                  ) {
                     e.currentTarget.style.background = `linear-gradient(135deg, ${userColor}dd, ${userColor}aa)`;
                     e.currentTarget.style.boxShadow = `0 4px 14px 0 ${userColor}40, 0 0 0 2px ${userColor}20`;
                   }
