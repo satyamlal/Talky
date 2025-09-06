@@ -5,58 +5,44 @@ const server = createServer();
 const PORT = process.env.PORT || 8080;
 const wss = new WebSocketServer({ server });
 
-const USER_COLORS: string[] = [
-  "#8FAFC2",
-  "#C2A894",
-  "#A8C294",
-  "#C294A0",
-  "#9AA2C9",
-  "#B39AC9",
-  "#94C2A4",
-  "#C2B894",
-  "#A894C2",
-  "#94C2BD",
-  "#C294A8",
-  "#A0C294",
-  "#94AEC2",
-  "#C2A694",
-  "#B894C2",
-  "#C2C194",
-  "#94C2C1",
-  "#C29494",
-  "#9CC294",
-  "#C294BA",
-  "#94A6C2",
-  "#C2AB94",
-  "#A494C2",
-  "#94C2B2",
-  "#C2A0A8",
-  "#A9C294",
-  "#94BAC2",
-  "#C2C294",
-  "#B094C2",
-  "#94C2A9",
-  "#C2949D",
-  "#A4C294",
-  "#94C2C8",
-  "#C2AD94",
-  "#A094C2",
-  "#94C29F",
-  "#C2B994",
-  "#C294C2",
-  "#9FC294",
-  "#94B5C2",
-  "#C2A594",
-  "#AD94C2",
-  "#94C2B8",
-  "#C294AA",
-  "#A2C294",
-  "#94C2A1",
-  "#C2C2A0",
-  "#B594C2",
-  "#94C2AC",
-  "#C2A994",
-];
+// Generate a unique color based on HSL color space
+const generateUniqueColor = (roomId: string): string => {
+  const usersInRoom = allSockets.filter((user) => user.room === roomId);
+  const usedColors = usersInRoom.map((user) => user.color);
+  
+  let newColor: string;
+  let attempts = 0;
+  const maxAttempts = 100;
+  
+  do {
+    // Generate random hue (0-360), high saturation (70-90%), medium lightness (45-75%)
+    const hue = Math.floor(Math.random() * 360);
+    const saturation = Math.floor(Math.random() * 21) + 70; // 70-90%
+    const lightness = Math.floor(Math.random() * 31) + 45;  // 45-75%
+    
+    // Convert HSL to HEX
+    newColor = hslToHex(hue, saturation, lightness);
+    attempts++;
+    
+    // If we've tried too many times, just use the color (very unlikely to happen)
+    if (attempts >= maxAttempts) break;
+    
+  } while (usedColors.includes(newColor));
+  
+  return newColor;
+};
+
+// Convert HSL to HEX color
+const hslToHex = (h: number, s: number, l: number): string => {
+  l /= 100;
+  const a = s * Math.min(l, 1 - l) / 100;
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * color).toString(16).padStart(2, '0');
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+};
 
 interface User {
   socket: WebSocket;
@@ -98,17 +84,7 @@ const generateUserId = (): string =>
   `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
 const getNextAvailableColor = (roomId: string): string => {
-  const usersInRoom = allSockets.filter((user) => user.room === roomId);
-  const usedColors = usersInRoom.map((user) => user.color);
-
-  for (const color of USER_COLORS) {
-    if (!usedColors.includes(color)) {
-      return color;
-    }
-  }
-
-  // If all colors are used, return a random color (this shouldn't happen with 15 colors)
-  return USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)]!;
+  return generateUniqueColor(roomId);
 };
 
 const broadcastUserCount = (roomId: string) => {
@@ -162,11 +138,17 @@ wss.on("connection", (socket, req) => {
 
       if (!existingUser) {
         const userId = generateUserId();
-        const userColor = getNextAvailableColor(parsedMessage.payload.roomId);
+
+        // Get users in room BEFORE adding the new user
         const usersInRoom = allSockets.filter(
           (user) => user.room === parsedMessage.payload.roomId
         );
+
+        // Generate username based on current count + 1
         const username = `User-${usersInRoom.length + 1}`;
+
+        // Get color AFTER getting current users but BEFORE adding new user
+        const userColor = getNextAvailableColor(parsedMessage.payload.roomId);
 
         allSockets.push({
           socket,
@@ -198,7 +180,11 @@ wss.on("connection", (socket, req) => {
         broadcastUserCount(parsedMessage.payload.roomId);
       } else if (existingUser.room !== parsedMessage.payload.roomId) {
         const oldRoom = existingUser.room;
+
+        // Update room first
         existingUser.room = parsedMessage.payload.roomId;
+
+        // Get new color for the new room (after updating the room)
         existingUser.color = getNextAvailableColor(
           parsedMessage.payload.roomId
         );
