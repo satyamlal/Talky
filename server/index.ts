@@ -157,7 +157,6 @@ wss.on("connection", (socket, req) => {
       if (!existingUser) {
         const userId = generateUserId();
 
-        // Get the next available username (reuses numbers from disconnected users)
         const username = getNextAvailableUsername();
 
         // new color for new user

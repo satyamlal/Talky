@@ -38,7 +38,7 @@ function App() {
   const [messages, setMessages] = useState<(ChatMessage | SystemMessage)[]>([]);
   const [inputMessage, setInputMessage] = useState<string>("");
   const [userCount, setUserCount] = useState<number>(0);
-  const [userColor, setUserColor] = useState<string>("#6b7280"); // Default gray color
+  const [userColor, setUserColor] = useState<string>("#6b7280");
   const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
   const [connectionStatus, setConnectionStatus] =
     useState<string>("Connecting...");
@@ -54,7 +54,6 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
-  // Auto-focus input when connected
   useEffect(() => {
     if (connectionStatus === "Connected" && inputRef.current) {
       inputRef.current.focus();
