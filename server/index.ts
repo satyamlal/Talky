@@ -164,7 +164,6 @@ wss.on("connection", (socket, req) => {
           })
         );
 
-        // Send user's personal color information
         socket.send(
           JSON.stringify({
             type: "userColor",
@@ -201,7 +200,6 @@ wss.on("connection", (socket, req) => {
           })
         );
 
-        // Send updated user color information
         socket.send(
           JSON.stringify({
             type: "userColor",

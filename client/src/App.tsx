@@ -28,7 +28,11 @@ interface UserColorMessage {
   username: string;
 }
 
-type Message = ChatMessage | SystemMessage | UserCountMessage | UserColorMessage;
+type Message =
+  | ChatMessage
+  | SystemMessage
+  | UserCountMessage
+  | UserColorMessage;
 
 function App() {
   const [messages, setMessages] = useState<(ChatMessage | SystemMessage)[]>([]);
