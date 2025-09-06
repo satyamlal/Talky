@@ -1,11 +1,33 @@
 #root {
-  max-width: 1280px;
-  margin: auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 body {
+  margin: 0;
+  padding: 0;
   background-color: #000000;
   background-image: radial-gradient(#ffffff33 1px, #070707 1px);
   background-size: 20px 20px;
+  overflow: hidden;
+}
+
+html {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Chat message text wrapping */
+.chat-message {
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.chat-message p {
+  white-space: pre-wrap;
 }

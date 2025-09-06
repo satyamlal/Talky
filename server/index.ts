@@ -5,7 +5,6 @@ const server = createServer();
 const PORT = process.env.PORT || 8080;
 const wss = new WebSocketServer({ server });
 
-// Generate a unique color
 const generateUniqueColor = (roomId: string): string => {
   const usersInRoom = allSockets.filter((user) => user.room === roomId);
   const usedColors = usersInRoom.map((user) => user.color);
@@ -77,6 +76,7 @@ interface PingMessage {
 type MessageType = ChatMessage | JoinMessage | PingMessage;
 
 let allSockets: User[] = [];
+let globalUserCounter = 0;
 
 const generateUserId = (): string =>
   `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
@@ -137,13 +137,9 @@ wss.on("connection", (socket, req) => {
       if (!existingUser) {
         const userId = generateUserId();
 
-        // Get users in room BEFORE adding the new user
-        const usersInRoom = allSockets.filter(
-          (user) => user.room === parsedMessage.payload.roomId
-        );
-
-        // Generating username
-        const username = `User-${usersInRoom.length + 1}`;
+        // Increment global counter for unique username
+        globalUserCounter++;
+        const username = `User-${globalUserCounter}`;
 
         // new color for new user
         const userColor = getNextAvailableColor(parsedMessage.payload.roomId);
@@ -165,6 +161,15 @@ wss.on("connection", (socket, req) => {
             type: "system",
             message: `Welcome! You've joined the room. You are ${username}`,
             color: userColor,
+          })
+        );
+
+        // Send user's personal color information
+        socket.send(
+          JSON.stringify({
+            type: "userColor",
+            color: userColor,
+            username: username,
           })
         );
 
@@ -193,6 +198,15 @@ wss.on("connection", (socket, req) => {
             type: "system",
             message: `Switched to room: ${parsedMessage.payload.roomId}`,
             color: existingUser.color,
+          })
+        );
+
+        // Send updated user color information
+        socket.send(
+          JSON.stringify({
+            type: "userColor",
+            color: existingUser.color,
+            username: existingUser.username,
           })
         );
 
