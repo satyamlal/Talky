@@ -317,4 +317,9 @@ server.listen(PORT, () => {
   console.log(`Local access: http://localhost:${PORT}`);
   console.log(`Network access: http://${localIP}:${PORT}`);
   console.log(`WebSocket URL: ${wsUrl}`);
+  
+  console.log(` - To test on your mobile or another device (Same Wi-Fi):`);
+  console.log(`   In the 'client/.env.local' file, add this line:`);
+  console.log(`   VITE_WS_URL=${wsUrl}`);
+
 });
