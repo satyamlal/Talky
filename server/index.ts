@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { createServer } from "http";
+import { networkInterfaces } from "os";
 
 const server = createServer();
 const PORT = process.env.PORT || 8080;
@@ -297,5 +298,23 @@ wss.on("connection", (socket, req) => {
 });
 
 server.listen(PORT, () => {
+  const getLocalIP = () => {
+    const interfaces = networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]!) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          return iface.address;
+        }
+      }
+    }
+    return 'localhost';
+  };
+
+  const localIP = getLocalIP();
+  const wsUrl = `ws://${localIP}:${PORT}`;
+
   console.log(`Server running on port ${PORT}`);
+  console.log(`Local access: http://localhost:${PORT}`);
+  console.log(`Network access: http://${localIP}:${PORT}`);
+  console.log(`WebSocket URL: ${wsUrl}`);
 });
