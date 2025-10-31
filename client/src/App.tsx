@@ -5,6 +5,7 @@ import { PollPanel, type CurrentPoll } from "./components/poll/PollPanel";
 import { InputBar } from "./components/chat/InputBar";
 import { ShareLinkButton } from "./components/buttons/ShareLinkButton";
 import { EndRoomButton } from "./components/buttons/EndRoomButton";
+import { Notifications } from "./components/Notifications";
 import "./App.css";
 
 interface ChatMessage {
@@ -97,6 +98,21 @@ interface ChatMessage {
     setTimeout(() => setPollNotice(""), 4500);
   };
 
+  // Left panel transient system notifications (4.5s)
+  const [leftNoticeMsg, setLeftNoticeMsg] = useState<string>("");
+  const [leftNoticeTone, setLeftNoticeTone] = useState<"info" | "error" | "success">("info");
+  const showLeftNotice = (msg: string): void => {
+    const lower = msg.toLowerCase();
+    const tone: "info" | "error" | "success" = lower.includes("denied") || lower.includes("invalid") || lower.includes("failed")
+      ? "error"
+      : lower.includes("welcome") || lower.includes("connected")
+      ? "success"
+      : "info";
+    setLeftNoticeTone(tone);
+    setLeftNoticeMsg(msg);
+    window.setTimeout(() => setLeftNoticeMsg(""), 4500);
+  };
+
     const scrollToBottom = (): void => {
       const el = messagesContainerRef.current;
       if (el) {
@@ -174,6 +190,9 @@ interface ChatMessage {
               ...prevMessages,
               parsedMessage as ChatMessage | SystemMessage,
             ]);
+            if (parsedMessage.type === "system") {
+              showLeftNotice((parsedMessage as SystemMessage).message);
+            }
           } else if (parsedMessage.type === "pollUpdated") {
             setCurrentPoll(parsedMessage.poll);
           } else if (parsedMessage.type === "needVerification") {
@@ -458,6 +477,7 @@ interface ChatMessage {
                 </div>
               </div>
               <div className="mt-8 space-y-3">
+                <Notifications message={leftNoticeMsg} tone={leftNoticeTone} />
                 <ShareLinkButton shareLink={shareLink} onClick={handleCreateOrCopyLink} />
                 <EndRoomButton isAdmin={isAdmin} onClick={handleEndRoom} />
               </div>
