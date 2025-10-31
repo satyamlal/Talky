@@ -44,13 +44,16 @@ pnpm install
 # Run server
 pnpm run dev
 ```
-Client runs here: http://localhost:5173/
-    ➜  Local:   http://localhost:5173/
-    ➜  Network: http://172.29.0.1:5173/
-    ➜  Network: http://192.168.56.1:5173/
-    ➜  Network: http://192.168.0.100:5173/
+### Client
+1.  Navigate to the `client` directory.
+2.  Run `npm install` (or `yarn`).
+3.  Run `npm run dev` (or `yarn dev`).
+4.  Open **`http://localhost:5173/`** in your browser.
 
-Server runs here:
-    ➜ Local access: http://localhost:8080
-    ➜ Network access: http://172.29.0.1:8080
-    ➜ WebSocket URL: ws://172.29.0.1:8080
+### Server
+1.  Navigate to the `server` directory.
+2.  Run `npm install` (or `yarn`).
+3.  Run `npm run start` (or `npm run dev`).
+4.  The server will be running at:
+    * **API:** `http://localhost:8080/`
+    * **WebSocket:** `ws://localhost:8080/`
