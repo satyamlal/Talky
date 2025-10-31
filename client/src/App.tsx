@@ -45,6 +45,16 @@ interface ChatMessage {
     roomId: string;
   }
 
+  interface PollUpdatedMessage {
+    type: "pollUpdated";
+    roomId: string;
+    poll: null | {
+      question: string;
+      options: { text: string; votes: number }[];
+      userVote?: number;
+    };
+  }
+
   type Message =
     | ChatMessage
     | SystemMessage
@@ -52,7 +62,8 @@ interface ChatMessage {
     | UserColorMessage
     | RoomCreatedMessage
     | NeedVerificationMessage
-    | VerifiedMessage;
+    | VerifiedMessage
+    | PollUpdatedMessage;
 
   function App() {
     const [messages, setMessages] = useState<(ChatMessage | SystemMessage)[]>([]);
@@ -71,6 +82,9 @@ interface ChatMessage {
     const wsRef = useRef<WebSocket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const joinTokenRef = useRef<string | null>(null);
+  const [currentPoll, setCurrentPoll] = useState<null | { question: string; options: { text: string; votes: number }[]; userVote?: number }>(null);
+  const [pollQuestion, setPollQuestion] = useState<string>("");
+  const [pollOptionsText, setPollOptionsText] = useState<string>("");
 
     const scrollToBottom = (): void => {
       const el = messagesContainerRef.current;
@@ -149,6 +163,8 @@ interface ChatMessage {
               ...prevMessages,
               parsedMessage as ChatMessage | SystemMessage,
             ]);
+          } else if (parsedMessage.type === "pollUpdated") {
+            setCurrentPoll(parsedMessage.poll);
           } else if (parsedMessage.type === "needVerification") {
             setShowVerifyModal(true);
             setPendingRoomId(parsedMessage.roomId);
@@ -346,6 +362,37 @@ interface ChatMessage {
           type: "endRoom",
           payload: { roomId: currentRoomId },
         })
+      );
+    };
+
+    // --- Poll actions ---
+    const handleCreatePoll = (): void => {
+      if (!wsRef.current || !isAdmin) return;
+      const options = pollOptionsText
+        .split(/\n|,/)
+        .map((s) => s.trim())
+        .filter((s) => s);
+      wsRef.current.send(
+        JSON.stringify({
+          type: "createPoll",
+          payload: { roomId: currentRoomId, question: pollQuestion, options },
+        })
+      );
+      setPollQuestion("");
+      setPollOptionsText("");
+    };
+
+    const handleVotePoll = (index: number): void => {
+      if (!wsRef.current) return;
+      wsRef.current.send(
+        JSON.stringify({ type: "votePoll", payload: { roomId: currentRoomId, optionIndex: index } })
+      );
+    };
+
+    const handleEndPoll = (): void => {
+      if (!wsRef.current || !isAdmin) return;
+      wsRef.current.send(
+        JSON.stringify({ type: "endPoll", payload: { roomId: currentRoomId } })
       );
     };
 
@@ -568,11 +615,55 @@ interface ChatMessage {
             </div>
           </div>
 
-          {/* Right panel placeholder for future (polls, allowed domains) */}
+          {/* Right panel: Polls */}
           <div className="col-span-12 sm:col-span-3 border border-sky-500/40 rounded-3xl p-4 bg-black/40">
-            <div className="text-sky-300">
-              <h3 className="text-lg font-semibold mb-2">Create a Poll</h3>
-              <p className="text-xs text-sky-400/70">(Coming next. Chat window stays unchanged.)</p>
+            <div className="text-sky-300 space-y-4">
+              <h3 className="text-lg font-semibold">Polls</h3>
+              {currentPoll ? (
+                <div className="space-y-3">
+                  <p className="text-sky-200 font-medium">{currentPoll.question}</p>
+                  <div className="space-y-2">
+                    {currentPoll.options.map((opt, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2">
+                        <div className="flex-1 text-sky-200 text-sm">{opt.text}</div>
+                        <div className="text-sky-400 text-xs min-w-[2rem] text-right">{opt.votes}</div>
+                        <button
+                          onClick={() => handleVotePoll(idx)}
+                          className={`px-2 py-1 rounded-md border ${currentPoll.userVote === idx ? "border-emerald-400/60 text-emerald-300" : "border-sky-400/60 text-sky-200"}`}
+                        >
+                          {currentPoll.userVote === idx ? "Voted" : "Vote"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {isAdmin && (
+                    <button onClick={handleEndPoll} className="w-full px-3 py-2 rounded-md border border-rose-400/60 text-rose-200">End Poll</button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {isAdmin ? (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="Poll question"
+                        value={pollQuestion}
+                        onChange={(e) => setPollQuestion(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
+                      />
+                      <textarea
+                        placeholder="Options (one per line or comma separated)"
+                        value={pollOptionsText}
+                        onChange={(e) => setPollOptionsText(e.target.value)}
+                        className="w-full h-24 px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
+                      />
+                      <button onClick={handleCreatePoll} className="w-full px-3 py-2 rounded-md border border-sky-400/60 text-sky-200">Create Poll</button>
+                    </>
+                  ) : (
+                    <p className="text-xs text-sky-400/70">No active poll.</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

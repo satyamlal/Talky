@@ -88,6 +88,11 @@ interface Room {
   isPrivate: boolean;
   joinToken: string; // used for private rooms links
   allowedDomains: Set<string>;
+  poll?: {
+    question: string;
+    options: { text: string; votes: number }[];
+    votesByUserId: Map<string, number>; // userId -> optionIndex
+  };
 }
 
 const rooms = new Map<string, Room>();
@@ -129,7 +134,34 @@ type ExtendedMessageType =
   | CreateRoomMessage
   | EndRoomMessage
   | RequestOtpMessage
-  | VerifyOtpMessage;
+  | VerifyOtpMessage
+  | CreatePollMessage
+  | VotePollMessage
+  | EndPollMessage;
+
+interface CreatePollMessage {
+  type: "createPoll";
+  payload: {
+    roomId: string;
+    question: string;
+    options: string[];
+  };
+}
+
+interface VotePollMessage {
+  type: "votePoll";
+  payload: {
+    roomId: string;
+    optionIndex: number;
+  };
+}
+
+interface EndPollMessage {
+  type: "endPoll";
+  payload: {
+    roomId: string;
+  };
+}
 
 const generateUserId = (): string =>
   `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
@@ -175,6 +207,43 @@ const broadcastUserCount = (roomId: string) => {
       }
     } catch (error) {
       console.error(`Failed to send userCount to user ${user.userId}:`, error);
+    }
+  });
+};
+
+// ---- Poll helpers ----
+const sendPollToUser = (socket: WebSocket, room: Room): void => {
+  const poll = room.poll;
+  const user = allSockets.find((x) => x.socket === socket);
+  if (!user) return;
+  if (!poll) {
+    socket.send(JSON.stringify({ type: "pollUpdated", roomId: room.id, poll: null }));
+    return;
+  }
+  const userVote = poll.votesByUserId.get(user.userId);
+  socket.send(
+    JSON.stringify({
+      type: "pollUpdated",
+      roomId: room.id,
+      poll: {
+        question: poll.question,
+        options: poll.options.map((o) => ({ text: o.text, votes: o.votes })),
+        userVote,
+      },
+    })
+  );
+};
+
+const broadcastPoll = (roomId: string): void => {
+  const room = rooms.get(roomId);
+  const users = allSockets.filter((u) => u.room === roomId);
+  users.forEach((u) => {
+    if (room && room.poll) {
+      sendPollToUser(u.socket, room);
+    } else {
+      u.socket.send(
+        JSON.stringify({ type: "pollUpdated", roomId, poll: null })
+      );
     }
   });
 };
@@ -387,6 +456,11 @@ wss.on("connection", (socket, req) => {
         );
 
         broadcastUserCount(parsedMessage.payload.roomId);
+        // send poll to newly joined user if exists
+        const room = rooms.get(parsedMessage.payload.roomId);
+        if (room?.poll) {
+          sendPollToUser(socket, room);
+        }
       } else if (existingUser.room !== parsedMessage.payload.roomId) {
   const oldRoom = existingUser.room;
 
@@ -425,6 +499,11 @@ wss.on("connection", (socket, req) => {
             count: newRoomUserCount,
           })
         );
+        // send poll state after switching rooms
+        const room = rooms.get(parsedMessage.payload.roomId);
+        if (room?.poll) {
+          sendPollToUser(socket, room);
+        }
       } else {
         const currentRoomUserCount = allSockets.filter(
           (user) => user.room === parsedMessage.payload.roomId
@@ -446,12 +525,72 @@ wss.on("connection", (socket, req) => {
         );
 
         broadcastUserCount(parsedMessage.payload.roomId);
+        // re-send poll if any
+        const room = rooms.get(parsedMessage.payload.roomId);
+        if (room?.poll) {
+          sendPollToUser(socket, room);
+        }
       }
     }
 
-    if (parsedMessage.type === "chat") {
+  if (parsedMessage.type === "chat") {
       const currentUser = allSockets.find((x) => x.socket === socket);
       if (!currentUser) return;
+
+      // Handle admin allowlist commands
+      const rawMsg = (parsedMessage.payload.message || "").trim();
+      if (rawMsg.startsWith("/allow")) {
+        const room = rooms.get(currentUser.room);
+        if (room) {
+          const isAdmin = currentUser.userId === room.adminUserId;
+          if (!isAdmin) {
+            socket.send(
+              JSON.stringify({ type: "system", message: "Only admin can manage allowlist." })
+            );
+            return;
+          }
+          const parts = rawMsg.split(/\s+/);
+          const sub = (parts[1] || "").toLowerCase();
+          if (sub === "add") {
+            const entries = parts.slice(2);
+            if (entries.length === 0) {
+              socket.send(
+                JSON.stringify({ type: "system", message: "Usage: /allow add @domain1 @domain2" })
+              );
+              return;
+            }
+            const norm = (d: string) => {
+              let dd = d.trim().toLowerCase();
+              if (!dd) return null;
+              if (!dd.startsWith("@")) dd = "@" + dd;
+              return dd;
+            };
+            entries.forEach((d) => {
+              const nd = norm(d);
+              if (nd) room.allowedDomains.add(nd);
+            });
+            socket.send(
+              JSON.stringify({ type: "system", message: `Allowlist updated: ${Array.from(room.allowedDomains).join(", ") || "(none)"}` })
+            );
+            return;
+          }
+          if (sub === "list") {
+            socket.send(
+              JSON.stringify({ type: "system", message: `Allowed domains: ${Array.from(room.allowedDomains).join(", ") || "(none)"}` })
+            );
+            return;
+          }
+          if (sub === "clear") {
+            room.allowedDomains.clear();
+            socket.send(JSON.stringify({ type: "system", message: "Allowlist cleared." }));
+            return;
+          }
+          socket.send(
+            JSON.stringify({ type: "system", message: "Usage: /allow add|list|clear" })
+          );
+          return;
+        }
+      }
 
       const messageData = {
         type: "chat",
@@ -467,6 +606,63 @@ wss.on("connection", (socket, req) => {
           user.socket.send(JSON.stringify(messageData));
         }
       });
+    }
+
+    // Create Poll (admin-only)
+    if (parsedMessage.type === "createPoll") {
+      const { roomId, question, options } = parsedMessage.payload;
+      const room = rooms.get(roomId);
+      const requester = allSockets.find((x) => x.socket === socket);
+      if (!room || !requester || requester.room !== roomId) return;
+      if (requester.userId !== room.adminUserId) {
+        socket.send(JSON.stringify({ type: "system", message: "Only admin can create a poll." }));
+        return;
+      }
+      const cleanOptions = (options || []).map((o) => o.trim()).filter((o) => o);
+      if (!question.trim() || cleanOptions.length < 2) {
+        socket.send(JSON.stringify({ type: "system", message: "Provide a question and at least 2 options." }));
+        return;
+      }
+      room.poll = {
+        question: question.trim(),
+        options: cleanOptions.map((text) => ({ text, votes: 0 })),
+        votesByUserId: new Map<string, number>(),
+      };
+      broadcastPoll(roomId);
+      return;
+    }
+
+    // Vote in Poll
+    if (parsedMessage.type === "votePoll") {
+      const { roomId, optionIndex } = parsedMessage.payload;
+      const room = rooms.get(roomId);
+      const voter = allSockets.find((x) => x.socket === socket);
+      if (!room || !room.poll || !voter || voter.room !== roomId) return;
+      const poll = room.poll!;
+      if (optionIndex < 0 || optionIndex >= poll.options.length) return;
+      const prev = poll.votesByUserId.get(voter.userId);
+      if (typeof prev === "number" && prev >= 0 && prev < poll.options.length) {
+        poll.options[prev]!.votes = Math.max(0, poll.options[prev]!.votes - 1);
+      }
+      poll.votesByUserId.set(voter.userId, optionIndex);
+      poll.options[optionIndex]!.votes += 1;
+      broadcastPoll(roomId);
+      return;
+    }
+
+    // End Poll (admin-only)
+    if (parsedMessage.type === "endPoll") {
+      const { roomId } = parsedMessage.payload;
+      const room = rooms.get(roomId);
+      const requester = allSockets.find((x) => x.socket === socket);
+      if (!room || !requester || requester.room !== roomId) return;
+      if (requester.userId !== room.adminUserId) {
+        socket.send(JSON.stringify({ type: "system", message: "Only admin can end the poll." }));
+        return;
+      }
+      delete room.poll;
+      broadcastPoll(roomId);
+      return;
     }
 
   // Admin explicitly ends a room
