@@ -5,11 +5,11 @@ Whether you want to chat globally, connect in small groups, or run quick live po
 
 ## Features
 
-- 🔒 **Stay Anonymous** – No accounts, no tracking, no personal data.
-- 💬 **Room-Based Chat** – Create or join rooms instantly.
-- 🌍 **Global Conversations** – Meet people from anywhere in the world.
-- ⏱ **Live Voting** – Run quick polls for 1–2 minutes to engage your audience. (under development)
-- ⚡ **Real-Time Messaging** – Powered by WebSockets for instant responses.
+- **Stay Anonymous** – No accounts, no tracking, no personal data.
+- **Room-Based Chat** – Create or join rooms instantly.
+- **Global Conversations** – Meet people from anywhere in the world.
+- **Live Voting** – Run quick polls for 1–2 minutes to engage your audience.
+- **Real-Time Messaging** – Powered by WebSockets for instant responses.
 
 ## Tech Stack
 
@@ -44,3 +44,13 @@ pnpm install
 # Run server
 pnpm run dev
 ```
+Client runs here: http://localhost:5173/
+    ➜  Local:   http://localhost:5173/
+    ➜  Network: http://172.29.0.1:5173/
+    ➜  Network: http://192.168.56.1:5173/
+    ➜  Network: http://192.168.0.100:5173/
+
+Server runs here:
+    ➜ Local access: http://localhost:8080
+    ➜ Network access: http://172.29.0.1:8080
+    ➜ WebSocket URL: ws://172.29.0.1:8080
