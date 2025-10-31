@@ -78,6 +78,28 @@ type MessageType = ChatMessage | JoinMessage | PingMessage;
 
 let allSockets: User[] = [];
 
+// ----- Rooms (in-memory, ephemeral) -----
+interface Room {
+  id: string;
+  name?: string;
+  adminUserId: string;
+  isPrivate: boolean;
+  joinToken: string; // used for private rooms links
+  allowedDomains: Set<string>;
+}
+
+const rooms = new Map<string, Room>();
+
+interface CreateRoomMessage {
+  type: "createRoom";
+  payload: {
+    name?: string;
+    isPrivate?: boolean; // default true
+  };
+}
+
+type ExtendedMessageType = MessageType | CreateRoomMessage;
+
 const generateUserId = (): string =>
   `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
@@ -135,7 +157,69 @@ wss.on("connection", (socket, req) => {
   );
 
   socket.on("message", (message) => {
-    const parsedMessage: MessageType = JSON.parse(message as unknown as string);
+    const parsedMessage: ExtendedMessageType = JSON.parse(
+      message as unknown as string
+    );
+    // Create a new room (private by default). The creator becomes admin
+    if (parsedMessage.type === "createRoom") {
+      const existingUser = allSockets.find((x) => x.socket === socket);
+
+      if (!existingUser) {
+        // User must first join some room to have a user record; ignore otherwise
+        socket.send(
+          JSON.stringify({
+            type: "system",
+            message:
+              "Join a room first before creating one. Use the app normally, then run /create.",
+          })
+        );
+        return;
+      }
+
+      const roomId = Math.random().toString(36).slice(2, 10);
+      const joinToken = Math.random().toString(36).slice(2, 10);
+      const isPrivate = parsedMessage.payload.isPrivate ?? true;
+
+      const room: Room = {
+        id: roomId,
+        adminUserId: existingUser.userId,
+        isPrivate,
+        joinToken,
+        allowedDomains: new Set<string>(),
+      } as Room;
+      if (parsedMessage.payload.name) room.name = parsedMessage.payload.name;
+      rooms.set(roomId, room);
+
+      // move creator to the new room
+      const oldRoom = existingUser.room;
+      existingUser.room = roomId;
+
+      broadcastUserCount(oldRoom);
+      broadcastUserCount(roomId);
+
+      // Reply with link (path-only; client combines with origin)
+      const linkPath = isPrivate
+        ? `?room=${roomId}&token=${joinToken}`
+        : `?room=${roomId}`;
+
+      socket.send(
+        JSON.stringify({
+          type: "system",
+          message: `Room created${isPrivate ? " (private)" : ""}. Share this link: ${linkPath}`,
+        })
+      );
+
+      socket.send(
+        JSON.stringify({
+          type: "roomCreated",
+          roomId,
+          isPrivate,
+          link: linkPath,
+        })
+      );
+
+      return;
+    }
 
     if (parsedMessage.type === "ping") {
       const usersInRoom = allSockets.filter(
