@@ -1,4 +1,10 @@
 import { useEffect, useState, useRef } from "react";
+import { LandingPage } from "./components/LandingPage";
+import { ChatHeader } from "./components/ChatHeader";
+import { PollPanel, type CurrentPoll } from "./components/poll/PollPanel";
+import { InputBar } from "./components/chat/InputBar";
+import { ShareLinkButton } from "./components/buttons/ShareLinkButton";
+import { EndRoomButton } from "./components/buttons/EndRoomButton";
 import "./App.css";
 
 interface ChatMessage {
@@ -82,13 +88,13 @@ interface ChatMessage {
     const wsRef = useRef<WebSocket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const joinTokenRef = useRef<string | null>(null);
-  const [currentPoll, setCurrentPoll] = useState<null | { question: string; options: { text: string; votes: number }[]; userVote?: number }>(null);
+  const [currentPoll, setCurrentPoll] = useState<CurrentPoll | null>(null);
   const [pollQuestion, setPollQuestion] = useState<string>("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]); // up to 5
   const [pollNotice, setPollNotice] = useState<string>("");
   const showPollNotice = (msg: string): void => {
     setPollNotice(msg);
-    setTimeout(() => setPollNotice(""), 2000);
+    setTimeout(() => setPollNotice(""), 4500);
   };
 
     const scrollToBottom = (): void => {
@@ -437,24 +443,7 @@ interface ChatMessage {
         }}
       >
     {showLanding ? (
-      <div className="w-full max-w-3xl h-full min-h-0 grid place-items-center">
-        <div className="w-full max-w-xl border border-sky-500/40 rounded-3xl bg-black/40 p-8 text-sky-300">
-          <div className="flex flex-col items-center gap-6">
-            <button
-              onClick={joinPublic}
-              className="w-80 px-6 py-3 rounded-xl border border-sky-400/60 hover:bg-sky-500/10"
-            >
-              Join a Public Room
-            </button>
-            <button
-              onClick={openPrivateModal}
-              className="w-80 px-6 py-3 rounded-xl border border-sky-400/60 hover:bg-sky-500/10"
-            >
-              Join a Private Room
-            </button>
-          </div>
-        </div>
-      </div>
+      <LandingPage onJoinPublic={joinPublic} onOpenPrivate={openPrivateModal} />
     ) : (
     <div className="w-full max-w-7xl h-full min-h-0 grid grid-cols-12 gap-4">
           {/* Left panel */}
@@ -469,20 +458,8 @@ interface ChatMessage {
                 </div>
               </div>
               <div className="mt-8 space-y-3">
-                <button
-                  onClick={handleCreateOrCopyLink}
-                  className="w-full px-4 py-2 rounded-xl border border-sky-400/60 text-sky-200 hover:bg-sky-500/10 transition"
-                >
-                  {shareLink ? "Share the Room Link" : "Create & Share Private Room"}
-                </button>
-                <button
-                  onClick={handleEndRoom}
-                  disabled={!isAdmin}
-                  className="w-full px-4 py-2 rounded-xl border border-rose-400/60 text-rose-200 disabled:opacity-40"
-                  title={isAdmin ? "Only admin can end the room" : "Create a room first to enable"}
-                >
-                  End this room
-                </button>
+                <ShareLinkButton shareLink={shareLink} onClick={handleCreateOrCopyLink} />
+                <EndRoomButton isAdmin={isAdmin} onClick={handleEndRoom} />
               </div>
             </div>
           </div>
@@ -491,27 +468,7 @@ interface ChatMessage {
           <div className="col-span-12 sm:col-span-6 flex items-stretch min-h-0">
             <div className="w-full max-w-4xl mx-auto h-full min-h-0 flex flex-col bg-black border border-[#25304a] rounded-3xl overflow-hidden">
               {/* Header */}
-              <div className="relative m-2 rounded-2xl z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-b border-gray-700 px-6 py-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-xl font-semibold text-white">Chat Room</h1>
-                    <p className="text-sm text-gray-400 pl-6">Topic : WebSockets</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div
-                      className={`h-3 w-3 rounded-full ${
-                        connectionStatus === "Connected" && userCount > 0
-                          ? "bg-green-400 animate-pulse"
-                          : connectionStatus === "Connected"
-                          ? "bg-yellow-400"
-                          : "bg-red-400"
-                      }`}
-                    ></div>
-
-                    <span className="text-sm text-gray-300">online : {userCount}</span>
-                  </div>
-                </div>
-              </div>
+              <ChatHeader connectionStatus={connectionStatus} userCount={userCount} topic="WebSockets" />
 
               {/* Messages Area */}
               <div ref={messagesContainerRef} className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4">
@@ -561,156 +518,34 @@ interface ChatMessage {
               </div>
 
               {/* Input Area */}
-              <div className="relative m-2 rounded-2xl z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-t border-gray-700 px-4 py-4">
-                <div className="max-w-4xl mx-auto rounded-3xl ">
-                  <div className="flex items-end space-x-3">
-                    <div className="flex-1">
-                      <div className="relative">
-                        <input
-                          ref={inputRef}
-                          type="text"
-                          value={inputMessage}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInputMessage(e.target.value)}
-                          onKeyPress={handleKeyPress}
-                          placeholder="Type your message..."
-                          className="w-full px-4 py-3 pr-12 text-white placeholder-gray-400 bg-gray-800 bg-opacity-80 border-2 rounded-2xl focus:outline-none backdrop-blur-sm transition-all duration-200"
-                          style={{
-                            borderColor: isInputFocused ? userColor : "#4b5563",
-                            boxShadow: isInputFocused ? `0 0 0 2px ${userColor}40` : "0 0 0 2px rgba(75, 85, 99, 0.2)",
-                          }}
-                          onFocus={() => {
-                            setIsInputFocused(true);
-                          }}
-                          onBlur={() => {
-                            setIsInputFocused(false);
-                          }}
-                          disabled={connectionStatus !== "Connected"}
-                        />
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleSendMessage}
-                      disabled={!inputMessage.trim() || connectionStatus !== "Connected"}
-                      className="flex items-center justify-center w-12 h-12 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white rounded-full transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 shadow-lg"
-                      style={{
-                        background:
-                          connectionStatus === "Connected" && (inputMessage.trim() || isInputFocused)
-                            ? `linear-gradient(135deg, ${userColor}dd, ${userColor}aa)`
-                            : "#4b5563",
-                        boxShadow:
-                          connectionStatus === "Connected" && (inputMessage.trim() || isInputFocused)
-                            ? `0 4px 14px 0 ${userColor}40, 0 0 0 2px ${userColor}20`
-                            : "0 4px 14px 0 rgba(75, 85, 99, 0.4)",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (connectionStatus === "Connected" && (inputMessage.trim() || isInputFocused)) {
-                          e.currentTarget.style.background = `linear-gradient(135deg, ${userColor}, ${userColor}cc)`;
-                          e.currentTarget.style.boxShadow = `0 6px 20px 0 ${userColor}50, 0 0 0 2px ${userColor}30`;
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (connectionStatus === "Connected" && (inputMessage.trim() || isInputFocused)) {
-                          e.currentTarget.style.background = `linear-gradient(135deg, ${userColor}dd, ${userColor}aa)`;
-                          e.currentTarget.style.boxShadow = `0 4px 14px 0 ${userColor}40, 0 0 0 2px ${userColor}20`;
-                        }
-                      }}
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <InputBar
+                inputRef={inputRef}
+                inputMessage={inputMessage}
+                setInputMessage={setInputMessage}
+                onSend={handleSendMessage}
+                onKeyPress={handleKeyPress}
+                isInputFocused={isInputFocused}
+                setIsInputFocused={setIsInputFocused}
+                userColor={userColor}
+                connectionStatus={connectionStatus}
+              />
             </div>
           </div>
 
           {/* Right panel: Polls */}
           <div className="col-span-12 sm:col-span-3 border border-sky-500/40 rounded-3xl p-4 bg-black/40">
-            <div className="text-sky-300 space-y-4">
-              <h3 className="text-lg font-semibold">Polls</h3>
-              {currentPoll ? (
-                <div className="space-y-3">
-                  <p className="text-sky-200 font-medium">{currentPoll.question}</p>
-                  <div className="space-y-2">
-                    {currentPoll.options.map((opt, idx) => (
-                      <label key={idx} className="flex items-center justify-between gap-2 cursor-pointer">
-                        <div className="flex items-center gap-2 flex-1">
-                          <input
-                            type="checkbox"
-                            checked={currentPoll.userVote === idx}
-                            onChange={() => handleVotePoll(idx)}
-                            disabled={typeof currentPoll.userVote === "number"}
-                            className="h-4 w-4 accent-sky-400"
-                          />
-                          <span className="text-sky-200 text-sm">{opt.text}</span>
-                        </div>
-                        <div className="text-sky-400 text-xs min-w-[2rem] text-right">{opt.votes}</div>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="space-y-2">
-                    {isAdmin && (
-                      <>
-                        <button onClick={handleEndPoll} className="w-full px-3 py-2 rounded-md border border-rose-400/60 text-rose-200">End Poll</button>
-                        {pollNotice && <p className="text-xs text-rose-300 text-center">{pollNotice}</p>}
-                      </>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {isAdmin ? (
-                    <>
-                      <input
-                        type="text"
-                        placeholder="Poll question"
-                        value={pollQuestion}
-                        onChange={(e) => setPollQuestion(e.target.value)}
-                        className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
-                      />
-                      <div className="space-y-2">
-                        {pollOptions.map((opt, idx) => (
-                          <div key={idx} className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              placeholder={`Option ${idx + 1}`}
-                              value={opt}
-                              onChange={(e) => {
-                                const next = [...pollOptions];
-                                next[idx] = e.target.value;
-                                setPollOptions(next);
-                              }}
-                              className="flex-1 px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
-                            />
-                            {pollOptions.length > 2 && (
-                              <button
-                                onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
-                                className="px-2 py-1 rounded-md border border-rose-400/60 text-rose-200"
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        {pollOptions.length < 5 && (
-                          <button
-                            onClick={() => setPollOptions([...pollOptions, ""]) }
-                            className="w-full px-3 py-2 rounded-md border border-sky-400/60 text-sky-200"
-                          >
-                            Add Option
-                          </button>
-                        )}
-                      </div>
-                      <button onClick={handleCreatePoll} className="w-full px-3 py-2 rounded-md border border-sky-400/60 text-sky-200">Create Poll</button>
-                      {pollNotice && <p className="text-xs text-rose-300 text-center">{pollNotice}</p>}
-                    </>
-                  ) : (
-                    <p className="text-xs text-sky-400/70">No active poll.</p>
-                  )}
-                </div>
-              )}
-            </div>
+            <PollPanel
+              isAdmin={isAdmin}
+              currentPoll={currentPoll}
+              pollQuestion={pollQuestion}
+              setPollQuestion={setPollQuestion}
+              pollOptions={pollOptions}
+              setPollOptions={setPollOptions}
+              onCreatePoll={handleCreatePoll}
+              onVote={handleVotePoll}
+              onEndPoll={handleEndPoll}
+              notice={pollNotice}
+            />
           </div>
         </div>
     )}
