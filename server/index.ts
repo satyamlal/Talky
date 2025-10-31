@@ -229,7 +229,7 @@ wss.on("connection", (socket, req) => {
   socket.send(
     JSON.stringify({
       type: "system",
-      message: "Connected to server. Send a join message to enter a room.",
+      message: "Connected to server.",
     })
   );
 

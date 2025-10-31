@@ -65,6 +65,8 @@ interface ChatMessage {
     const [connectionStatus, setConnectionStatus] =
       useState<string>("Connecting...");
     const [currentRoomId, setCurrentRoomId] = useState<string>("red");
+    const [readyToJoin, setReadyToJoin] = useState<boolean>(false);
+    const [showLanding, setShowLanding] = useState<boolean>(true);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -96,11 +98,12 @@ interface ChatMessage {
       // Parse link params for room & token
       let initialRoomId = "red";
       let initialToken: string | null = null;
+      let hasRoomParam = false;
       try {
         const url = new URL(window.location.href);
         const roomParam = url.searchParams.get("room");
         const tokenParam = url.searchParams.get("token");
-        if (roomParam) initialRoomId = roomParam;
+        if (roomParam) { initialRoomId = roomParam; hasRoomParam = true; }
         if (tokenParam) initialToken = tokenParam;
       } catch (err) {
         // ignore URL parse errors
@@ -108,6 +111,8 @@ interface ChatMessage {
       }
       setCurrentRoomId(initialRoomId);
       joinTokenRef.current = initialToken;
+      setShowLanding(!hasRoomParam);
+      setReadyToJoin(hasRoomParam);
 
       const ws: WebSocket = new WebSocket(wsUrl);
 
@@ -170,16 +175,17 @@ interface ChatMessage {
 
       ws.onopen = (): void => {
         setConnectionStatus("Connected");
-
-        ws.send(
-          JSON.stringify({
-            type: "join",
-            payload: {
-              roomId: initialRoomId,
-              token: initialToken || undefined,
-            },
-          })
-        );
+        if (hasRoomParam) {
+          ws.send(
+            JSON.stringify({
+              type: "join",
+              payload: {
+                roomId: initialRoomId,
+                token: initialToken || undefined,
+              },
+            })
+          );
+        }
       };
 
       ws.onerror = (error: Event): void => {
@@ -258,6 +264,70 @@ interface ChatMessage {
       );
     };
 
+    // --- Landing interactions ---
+    const [showPrivateLinkModal, setShowPrivateLinkModal] = useState(false);
+    const [privateLinkInput, setPrivateLinkInput] = useState("");
+
+    const joinPublic = (): void => {
+      setShowLanding(false);
+      setReadyToJoin(true);
+      joinTokenRef.current = null;
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({ type: "join", payload: { roomId: "red" } })
+        );
+      }
+    };
+
+    const openPrivateModal = (): void => {
+      setPrivateLinkInput("");
+      setShowPrivateLinkModal(true);
+    };
+
+    const handlePrivateJoin = (): void => {
+      try {
+        const url = new URL(privateLinkInput);
+        const roomParam = url.searchParams.get("room");
+        const tokenParam = url.searchParams.get("token");
+        if (!roomParam || !tokenParam) return;
+        setCurrentRoomId(roomParam);
+        joinTokenRef.current = tokenParam;
+        const newSearch = `?room=${roomParam}&token=${tokenParam}`;
+        window.history.pushState({}, "", newSearch);
+        setShowPrivateLinkModal(false);
+        setShowLanding(false);
+        setReadyToJoin(true);
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(
+            JSON.stringify({
+              type: "join",
+              payload: { roomId: roomParam, token: tokenParam },
+            })
+          );
+        }
+      } catch {
+        // ignore malformed URL
+      }
+    };
+
+    useEffect(() => {
+      if (
+        readyToJoin &&
+        wsRef.current &&
+        wsRef.current.readyState === WebSocket.OPEN
+      ) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: "join",
+            payload: {
+              roomId: currentRoomId || "red",
+              token: joinTokenRef.current || undefined,
+            },
+          })
+        );
+      }
+    }, [readyToJoin, currentRoomId]);
+
     const handleVerifyOtp = (): void => {
       if (!wsRef.current || !pendingRoomId || !verifyEmail || !verifyOtp) return;
       setVerifyInfo("Verifying...");
@@ -307,6 +377,26 @@ interface ChatMessage {
           backgroundSize: "20px 20px",
         }}
       >
+    {showLanding ? (
+      <div className="w-full max-w-3xl h-full min-h-0 grid place-items-center">
+        <div className="w-full max-w-xl border border-sky-500/40 rounded-3xl bg-black/40 p-8 text-sky-300">
+          <div className="flex flex-col items-center gap-6">
+            <button
+              onClick={joinPublic}
+              className="w-80 px-6 py-3 rounded-xl border border-sky-400/60 hover:bg-sky-500/10"
+            >
+              Join a Public Room
+            </button>
+            <button
+              onClick={openPrivateModal}
+              className="w-80 px-6 py-3 rounded-xl border border-sky-400/60 hover:bg-sky-500/10"
+            >
+              Join a Private Room
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : (
     <div className="w-full max-w-7xl h-full min-h-0 grid grid-cols-12 gap-4">
           {/* Left panel */}
           <div className="col-span-12 sm:col-span-3 border border-sky-500/40 rounded-3xl p-4 bg-black/40">
@@ -486,7 +576,28 @@ interface ChatMessage {
             </div>
           </div>
         </div>
-        {showVerifyModal && (
+    )}
+    {showPrivateLinkModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="w-full max-w-md rounded-2xl border border-sky-500/40 bg-gray-900 p-6 text-sky-100">
+          <h3 className="text-lg font-semibold mb-4">Enter the private room link</h3>
+          <div className="space-y-3">
+            <input
+              type="text"
+              placeholder="Paste the link here"
+              value={privateLinkInput}
+              onChange={(e) => setPrivateLinkInput(e.target.value)}
+              className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
+            />
+            <div className="flex items-center gap-2 justify-end">
+              <button onClick={() => setShowPrivateLinkModal(false)} className="px-3 py-2 rounded-md border border-gray-500/60">Cancel</button>
+              <button onClick={handlePrivateJoin} className="px-3 py-2 rounded-md border border-sky-400/60">Continue</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    {showVerifyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="w-full max-w-md rounded-2xl border border-sky-500/40 bg-gray-900 p-6 text-sky-100">
             <h3 className="text-lg font-semibold mb-4">Verify your email to join</h3>
@@ -512,8 +623,8 @@ interface ChatMessage {
               {verifyInfo && <p className="text-xs text-sky-300">{verifyInfo}</p>}
             </div>
           </div>
-        </div>
-        )}
+  </div>
+  )}
       </div>
     );
   }
