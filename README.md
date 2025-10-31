@@ -45,15 +45,9 @@ pnpm install
 pnpm run dev
 ```
 ### Client
-1.  Navigate to the `client` directory.
-2.  Run `npm install` (or `yarn`).
-3.  Run `npm run dev` (or `yarn dev`).
-4.  Open **`http://localhost:5173/`** in your browser.
+- Open **`http://localhost:5173/`** in your browser.
 
 ### Server
-1.  Navigate to the `server` directory.
-2.  Run `npm install` (or `yarn`).
-3.  Run `npm run start` (or `npm run dev`).
-4.  The server will be running at:
+- The server will be running at:
     * **API:** `http://localhost:8080/`
     * **WebSocket:** `ws://localhost:8080/`
