@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { createServer } from "http";
+import { request as httpsRequest } from "https";
 import { networkInterfaces } from "os";
 
 const server = createServer();
@@ -64,6 +65,7 @@ interface JoinMessage {
   type: "join";
   payload: {
     roomId: string;
+    token?: string;
   };
 }
 
@@ -98,7 +100,36 @@ interface CreateRoomMessage {
   };
 }
 
-type ExtendedMessageType = MessageType | CreateRoomMessage;
+interface EndRoomMessage {
+  type: "endRoom";
+  payload: {
+    roomId: string;
+  };
+}
+
+interface RequestOtpMessage {
+  type: "requestOtp";
+  payload: {
+    roomId: string;
+    email: string;
+  };
+}
+
+interface VerifyOtpMessage {
+  type: "verifyOtp";
+  payload: {
+    roomId: string;
+    email: string;
+    otp: string;
+  };
+}
+
+type ExtendedMessageType =
+  | MessageType
+  | CreateRoomMessage
+  | EndRoomMessage
+  | RequestOtpMessage
+  | VerifyOtpMessage;
 
 const generateUserId = (): string =>
   `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
@@ -148,6 +179,52 @@ const broadcastUserCount = (roomId: string) => {
   });
 };
 
+// ---- OTP + verification (in-memory) ----
+const otpStore = new Map<string, { otp: string; expiresAt: number }>(); // key: roomId:email
+const verifiedSockets = new Map<WebSocket, Set<string>>(); // socket -> set of roomIds
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY || process.env.RESEND_API || "";
+const RESEND_FROM = process.env.RESEND_FROM || "Talky <onboarding@resend.dev>";
+
+const sendEmailResend = async (
+  to: string,
+  subject: string,
+  text: string
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({ from: RESEND_FROM, to, subject, text });
+
+    const req = httpsRequest(
+      {
+        hostname: "api.resend.com",
+        path: "/emails",
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (d) => chunks.push(Buffer.from(d)));
+        res.on("end", () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            resolve();
+          } else {
+            const body = Buffer.concat(chunks).toString("utf-8");
+            reject(new Error(`Resend error ${res.statusCode}: ${body}`));
+          }
+        });
+      }
+    );
+
+    req.on("error", (err) => reject(err));
+    req.write(payload);
+    req.end();
+  });
+};
+
 wss.on("connection", (socket, req) => {
   socket.send(
     JSON.stringify({
@@ -160,6 +237,7 @@ wss.on("connection", (socket, req) => {
     const parsedMessage: ExtendedMessageType = JSON.parse(
       message as unknown as string
     );
+    
     // Create a new room (private by default). The creator becomes admin
     if (parsedMessage.type === "createRoom") {
       const existingUser = allSockets.find((x) => x.socket === socket);
@@ -221,7 +299,7 @@ wss.on("connection", (socket, req) => {
       return;
     }
 
-    if (parsedMessage.type === "ping") {
+  if (parsedMessage.type === "ping") {
       const usersInRoom = allSockets.filter(
         (user) => user.room === parsedMessage.payload.roomId
       );
@@ -239,13 +317,39 @@ wss.on("connection", (socket, req) => {
     if (parsedMessage.type === "join") {
       const existingUser = allSockets.find((x) => x.socket === socket);
 
-      if (!existingUser) {
-        const userId = generateUserId();
+      // If the room exists and is private, validate the token
+      const maybeRoom = rooms.get(parsedMessage.payload.roomId);
+      if (maybeRoom && maybeRoom.isPrivate) {
+        const provided = parsedMessage.payload.token || "";
+        if (provided !== maybeRoom.joinToken) {
+          socket.send(
+            JSON.stringify({
+              type: "system",
+              message: "Access denied: invalid or missing token for this private room.",
+            })
+          );
+          return; // do not join
+        }
+        // token ok; enforce email verification step for private rooms
+        const verifiedForRoom = verifiedSockets.get(socket)?.has(maybeRoom.id);
+        if (!verifiedForRoom) {
+          socket.send(
+            JSON.stringify({
+              type: "needVerification",
+              roomId: maybeRoom.id,
+            })
+          );
+          return;
+        }
+      }
 
-        const username = getNextAvailableUsername();
+      if (!existingUser) {
+  const userId = generateUserId();
+
+  const username = getNextAvailableUsername();
 
         // new color for new user
-        const userColor = getNextAvailableColor(parsedMessage.payload.roomId);
+  const userColor = getNextAvailableColor(parsedMessage.payload.roomId);
 
         allSockets.push({
           socket,
@@ -284,7 +388,7 @@ wss.on("connection", (socket, req) => {
 
         broadcastUserCount(parsedMessage.payload.roomId);
       } else if (existingUser.room !== parsedMessage.payload.roomId) {
-        const oldRoom = existingUser.room;
+  const oldRoom = existingUser.room;
 
         existingUser.room = parsedMessage.payload.roomId;
 
@@ -364,6 +468,127 @@ wss.on("connection", (socket, req) => {
         }
       });
     }
+
+  // Admin explicitly ends a room
+    if (parsedMessage.type === "endRoom") {
+      const endRoomId = parsedMessage.payload.roomId;
+      const room = rooms.get(endRoomId);
+      if (!room) {
+        socket.send(
+          JSON.stringify({
+            type: "system",
+            message: "Room not found.",
+          })
+        );
+        return;
+      }
+
+      const requester = allSockets.find((x) => x.socket === socket);
+      if (!requester || requester.userId !== room.adminUserId) {
+        socket.send(
+          JSON.stringify({
+            type: "system",
+            message: "Only the room admin can end this room.",
+          })
+        );
+        return;
+      }
+
+      const usersToClose = allSockets.filter((u) => u.room === endRoomId);
+      usersToClose.forEach((u) => {
+        try {
+          u.socket.send(
+            JSON.stringify({
+              type: "system",
+              message: `Room ${endRoomId} has been ended by the admin.`,
+            })
+          );
+          // Close their connection; client can reconnect to default later
+          u.socket.close();
+        } catch {}
+      });
+
+      // Remove users from list
+      allSockets = allSockets.filter((u) => u.room !== endRoomId);
+      rooms.delete(endRoomId);
+      return;
+    }
+
+    // Request OTP (prior to join)
+    if (parsedMessage.type === "requestOtp") {
+      const { roomId, email } = parsedMessage.payload;
+      const room = rooms.get(roomId);
+      if (!room || !room.isPrivate) {
+        socket.send(
+          JSON.stringify({ type: "system", message: "Invalid room for OTP." })
+        );
+        return;
+      }
+
+      // Basic domain allowlist enforcement
+      if (room.allowedDomains.size > 0) {
+        const domain = (email.split("@")[1] || "").toLowerCase();
+        if (!room.allowedDomains.has(`@${domain}`)) {
+          socket.send(
+            JSON.stringify({
+              type: "system",
+              message: `Email domain not allowed for this room.`,
+            })
+          );
+          return;
+        }
+      }
+
+      // generate OTP
+      const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
+      const key = `${roomId}:${email.toLowerCase()}`;
+      otpStore.set(key, { otp, expiresAt: Date.now() + 5 * 60 * 1000 }); // 5 min
+
+      if (!RESEND_API_KEY) {
+        console.log(`[DEV] OTP for ${email} in room ${roomId}: ${otp}`);
+        socket.send(JSON.stringify({ type: "system", message: "OTP generated (DEV). Check server logs." }));
+        return;
+      }
+
+      // send email via Resend
+      sendEmailResend(
+        email,
+        `Your Talky OTP (${roomId})`,
+        `Your OTP is ${otp}. It expires in 5 minutes.`
+      )
+        .then(() => {
+          socket.send(
+            JSON.stringify({ type: "system", message: "OTP sent to your email." })
+          );
+        })
+        .catch((err) => {
+          console.error("Resend error:", err);
+          socket.send(
+            JSON.stringify({ type: "system", message: "Failed to send OTP. Try again later." })
+          );
+        });
+      return;
+    }
+
+    // Verify OTP
+    if (parsedMessage.type === "verifyOtp") {
+      const { roomId, email, otp } = parsedMessage.payload;
+      const key = `${roomId}:${email.toLowerCase()}`;
+      const rec = otpStore.get(key);
+      if (!rec || rec.expiresAt < Date.now() || rec.otp !== otp) {
+        socket.send(
+          JSON.stringify({ type: "system", message: "Invalid or expired OTP." })
+        );
+        return;
+      }
+      // mark socket verified for room
+      if (!verifiedSockets.has(socket)) verifiedSockets.set(socket, new Set());
+      verifiedSockets.get(socket)!.add(roomId);
+      otpStore.delete(key);
+      socket.send(JSON.stringify({ type: "system", message: "Email verified. You can join now." }));
+      socket.send(JSON.stringify({ type: "verified", roomId }));
+      return;
+    }
   });
 
   socket.on("close", () => {
@@ -372,7 +597,28 @@ wss.on("connection", (socket, req) => {
     allSockets = allSockets.filter((x) => x.socket !== socket);
 
     if (disconnectedUser) {
-      broadcastUserCount(disconnectedUser.room);
+      // If the disconnected user is an admin of a room, end that room
+      const adminRoom = Array.from(rooms.values()).find(
+        (r) => r.adminUserId === disconnectedUser.userId
+      );
+      if (adminRoom) {
+        const usersToClose = allSockets.filter((u) => u.room === adminRoom.id);
+        usersToClose.forEach((u) => {
+          try {
+            u.socket.send(
+              JSON.stringify({
+                type: "system",
+                message: `Room ${adminRoom.id} has ended because the admin disconnected.`,
+              })
+            );
+            u.socket.close();
+          } catch {}
+        });
+        allSockets = allSockets.filter((u) => u.room !== adminRoom.id);
+        rooms.delete(adminRoom.id);
+      } else {
+        broadcastUserCount(disconnectedUser.room);
+      }
     }
   });
 

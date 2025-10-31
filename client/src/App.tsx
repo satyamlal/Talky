@@ -35,12 +35,24 @@ interface ChatMessage {
     link: string; // path part, e.g., ?room=abc&token=xyz
   }
 
+  interface NeedVerificationMessage {
+    type: "needVerification";
+    roomId: string;
+  }
+
+  interface VerifiedMessage {
+    type: "verified";
+    roomId: string;
+  }
+
   type Message =
     | ChatMessage
     | SystemMessage
     | UserCountMessage
     | UserColorMessage
-    | RoomCreatedMessage;
+    | RoomCreatedMessage
+    | NeedVerificationMessage
+    | VerifiedMessage;
 
   function App() {
     const [messages, setMessages] = useState<(ChatMessage | SystemMessage)[]>([]);
@@ -52,12 +64,17 @@ interface ChatMessage {
     const [shareLink, setShareLink] = useState<string | null>(null);
     const [connectionStatus, setConnectionStatus] =
       useState<string>("Connecting...");
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [currentRoomId, setCurrentRoomId] = useState<string>("red");
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WebSocket | null>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const joinTokenRef = useRef<string | null>(null);
 
     const scrollToBottom = (): void => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const el = messagesContainerRef.current;
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
     };
 
     useEffect(() => {
@@ -76,6 +93,21 @@ interface ChatMessage {
         (import.meta.env.DEV
           ? "ws://localhost:8080"
           : "wss://talky-1ftp.onrender.com");
+      // Parse link params for room & token
+      let initialRoomId = "red";
+      let initialToken: string | null = null;
+      try {
+        const url = new URL(window.location.href);
+        const roomParam = url.searchParams.get("room");
+        const tokenParam = url.searchParams.get("token");
+        if (roomParam) initialRoomId = roomParam;
+        if (tokenParam) initialToken = tokenParam;
+      } catch (err) {
+        // ignore URL parse errors
+        void err;
+      }
+      setCurrentRoomId(initialRoomId);
+      joinTokenRef.current = initialToken;
 
       const ws: WebSocket = new WebSocket(wsUrl);
 
@@ -89,6 +121,7 @@ interface ChatMessage {
             setUserColor(parsedMessage.color);
           } else if (parsedMessage.type === "roomCreated") {
             setIsAdmin(true);
+            setCurrentRoomId(parsedMessage.roomId);
             const full = `${window.location.origin}/${
               parsedMessage.link.startsWith("?")
                 ? parsedMessage.link
@@ -111,6 +144,19 @@ interface ChatMessage {
               ...prevMessages,
               parsedMessage as ChatMessage | SystemMessage,
             ]);
+          } else if (parsedMessage.type === "needVerification") {
+            setShowVerifyModal(true);
+            setPendingRoomId(parsedMessage.roomId);
+          } else if (parsedMessage.type === "verified") {
+            // auto-join after verification
+            setShowVerifyModal(false);
+            const r = parsedMessage.roomId;
+            wsRef.current?.send(
+              JSON.stringify({
+                type: "join",
+                payload: { roomId: r, token: joinTokenRef.current || undefined },
+              })
+            );
           }
         } catch (error) {
           console.error("Failed to parse message:", error);
@@ -129,7 +175,8 @@ interface ChatMessage {
           JSON.stringify({
             type: "join",
             payload: {
-              roomId: "red",
+              roomId: initialRoomId,
+              token: initialToken || undefined,
             },
           })
         );
@@ -176,7 +223,7 @@ interface ChatMessage {
       setInputMessage("");
     };
 
-    const handleCreateOrCopyLink = (): void => {
+  const handleCreateOrCopyLink = (): void => {
       if (!wsRef.current) return;
       if (shareLink) {
         navigator.clipboard.writeText(shareLink).then(() => {
@@ -189,6 +236,45 @@ interface ChatMessage {
         JSON.stringify({
           type: "createRoom",
           payload: { name: undefined },
+        })
+      );
+    };
+
+    // --- Email OTP modal state & handlers ---
+    const [showVerifyModal, setShowVerifyModal] = useState(false);
+    const [verifyEmail, setVerifyEmail] = useState("");
+    const [verifyOtp, setVerifyOtp] = useState("");
+    const [pendingRoomId, setPendingRoomId] = useState<string | null>(null);
+    const [verifyInfo, setVerifyInfo] = useState<string>("");
+
+    const handleRequestOtp = (): void => {
+      if (!wsRef.current || !pendingRoomId || !verifyEmail) return;
+      setVerifyInfo("Sending OTP...");
+      wsRef.current.send(
+        JSON.stringify({
+          type: "requestOtp",
+          payload: { roomId: pendingRoomId, email: verifyEmail },
+        })
+      );
+    };
+
+    const handleVerifyOtp = (): void => {
+      if (!wsRef.current || !pendingRoomId || !verifyEmail || !verifyOtp) return;
+      setVerifyInfo("Verifying...");
+      wsRef.current.send(
+        JSON.stringify({
+          type: "verifyOtp",
+          payload: { roomId: pendingRoomId, email: verifyEmail, otp: verifyOtp },
+        })
+      );
+    };
+
+    const handleEndRoom = (): void => {
+      if (!wsRef.current || !isAdmin || !currentRoomId) return;
+      wsRef.current.send(
+        JSON.stringify({
+          type: "endRoom",
+          payload: { roomId: currentRoomId },
         })
       );
     };
@@ -212,7 +298,7 @@ interface ChatMessage {
 
     return (
       <div
-        className="h-screen w-screen flex flex-col bg-black relative overflow-hidden items-center justify-center p-4"
+        className="h-screen w-screen flex flex-col bg-black relative overflow-hidden items-center justify-start p-4"
         style={{
           backgroundImage: `
             linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
@@ -221,7 +307,7 @@ interface ChatMessage {
           backgroundSize: "20px 20px",
         }}
       >
-        <div className="w-full max-w-7xl h-full grid grid-cols-12 gap-4">
+    <div className="w-full max-w-7xl h-full min-h-0 grid grid-cols-12 gap-4">
           {/* Left panel */}
           <div className="col-span-12 sm:col-span-3 border border-sky-500/40 rounded-3xl p-4 bg-black/40">
             <div className="space-y-6 text-sky-300">
@@ -243,6 +329,7 @@ interface ChatMessage {
               </div>
               <div>
                 <button
+                  onClick={handleEndRoom}
                   disabled={!isAdmin}
                   className="w-full px-4 py-2 rounded-xl border border-rose-400/60 text-rose-200 disabled:opacity-40"
                   title={isAdmin ? "Only admin can end the room" : "Create a room first to enable"}
@@ -254,8 +341,8 @@ interface ChatMessage {
           </div>
 
           {/* Center (original chat window, unchanged) */}
-          <div className="col-span-12 sm:col-span-6 flex items-stretch">
-            <div className="w-full max-w-4xl mx-auto h-full flex flex-col bg-black border border-[#25304a] rounded-3xl overflow-hidden">
+          <div className="col-span-12 sm:col-span-6 flex items-stretch min-h-0">
+            <div className="w-full max-w-4xl mx-auto h-full min-h-0 flex flex-col bg-black border border-[#25304a] rounded-3xl overflow-hidden">
               {/* Header */}
               <div className="relative m-2 rounded-2xl z-10 bg-gray-900 bg-opacity-90 backdrop-blur-sm border-b border-gray-700 px-6 py-4">
                 <div className="flex items-center justify-between">
@@ -280,7 +367,7 @@ interface ChatMessage {
               </div>
 
               {/* Messages Area */}
-              <div className="relative z-10 flex-1 overflow-y-auto p-4 space-y-4">
+              <div ref={messagesContainerRef} className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4">
                 <div className="mx-auto space-y-4">
                   {messages.length === 0 ? (
                     <div className="text-center py-12">
@@ -322,7 +409,7 @@ interface ChatMessage {
                       </div>
                     ))
                   )}
-                  <div ref={messagesEndRef} />
+                  {/* sentinel removed; container scroll is controlled programmatically */}
                 </div>
               </div>
 
@@ -399,6 +486,34 @@ interface ChatMessage {
             </div>
           </div>
         </div>
+        {showVerifyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-md rounded-2xl border border-sky-500/40 bg-gray-900 p-6 text-sky-100">
+            <h3 className="text-lg font-semibold mb-4">Verify your email to join</h3>
+            <div className="space-y-3">
+              <input
+                type="email"
+                placeholder="your@email"
+                value={verifyEmail}
+                onChange={(e) => setVerifyEmail(e.target.value)}
+                className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
+              />
+              <div className="flex items-center gap-2">
+                <button onClick={handleRequestOtp} className="px-3 py-2 rounded-md border border-sky-400/60">Send OTP</button>
+                <input
+                  type="text"
+                  placeholder="Enter OTP"
+                  value={verifyOtp}
+                  onChange={(e) => setVerifyOtp(e.target.value)}
+                  className="flex-1 px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
+                />
+                <button onClick={handleVerifyOtp} className="px-3 py-2 rounded-md border border-emerald-400/60">Verify</button>
+              </div>
+              {verifyInfo && <p className="text-xs text-sky-300">{verifyInfo}</p>}
+            </div>
+          </div>
+        </div>
+        )}
       </div>
     );
   }
