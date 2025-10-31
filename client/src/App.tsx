@@ -73,7 +73,8 @@ interface ChatMessage {
     | PollUpdatedMessage;
 
   function App() {
-    const [messages, setMessages] = useState<(ChatMessage | SystemMessage)[]>([]);
+    // Only keep real chat messages in the center pane; route system messages to left-side notifications
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [inputMessage, setInputMessage] = useState<string>("");
     const [userCount, setUserCount] = useState<number>(0);
     const [userColor, setUserColor] = useState<string>("#6b7280");
@@ -98,7 +99,6 @@ interface ChatMessage {
     setTimeout(() => setPollNotice(""), 4500);
   };
 
-  // Left panel transient system notifications (4.5s)
   const [leftNoticeMsg, setLeftNoticeMsg] = useState<string>("");
   const [leftNoticeTone, setLeftNoticeTone] = useState<"info" | "error" | "success">("info");
   const showLeftNotice = (msg: string): void => {
@@ -136,7 +136,7 @@ interface ChatMessage {
         (import.meta.env.DEV
           ? "ws://localhost:8080"
           : "wss://talky-1ftp.onrender.com");
-      // Parse link params for room & token
+      
       let initialRoomId = "red";
       let initialToken: string | null = null;
       let hasRoomParam = false;
@@ -174,24 +174,19 @@ interface ChatMessage {
                 : `?room=${parsedMessage.roomId}`
             }`;
             setShareLink(full);
-            // also show in chat as system message
-            setMessages((prev) => [
-              ...prev,
-              {
-                type: "system",
-                message: `Room created. Share this link: ${full}`,
-              } as SystemMessage,
-            ]);
+            showLeftNotice(`Room created. Share this link: ${full}`);
           } else if (
             parsedMessage.type === "system" ||
             parsedMessage.type === "chat"
           ) {
-            setMessages((prevMessages) => [
-              ...prevMessages,
-              parsedMessage as ChatMessage | SystemMessage,
-            ]);
-            if (parsedMessage.type === "system") {
-              showLeftNotice((parsedMessage as SystemMessage).message);
+            if (parsedMessage.type === "chat") {
+              setMessages((prevMessages) => [
+                ...prevMessages,
+                parsedMessage as ChatMessage,
+              ]);
+            } else {
+              const sys = parsedMessage as SystemMessage;
+              if (sys.message) showLeftNotice(sys.message);
             }
           } else if (parsedMessage.type === "pollUpdated") {
             setCurrentPoll(parsedMessage.poll);
@@ -210,12 +205,14 @@ interface ChatMessage {
             );
           }
         } catch (error) {
-          console.error("Failed to parse message:", error);
-          const systemMessage: SystemMessage = {
-            type: "system",
-            message: event.data,
-          };
-          setMessages((prevMessages) => [...prevMessages, systemMessage]);
+          console.error("Failed to parse message:", error, event.data);
+          try {
+            if (typeof event.data === "string" && event.data.trim()) {
+              showLeftNotice(event.data);
+            }
+          } catch {
+            // ignore
+          }
         }
       };
 
@@ -440,9 +437,9 @@ interface ChatMessage {
     };
 
     const getMessageStyle = (
-      message: ChatMessage | SystemMessage
+      message: ChatMessage
     ): React.CSSProperties => {
-      if (message.type === "chat" && message.color) {
+      if (message.color) {
         return {
           borderLeft: `4px solid ${message.color}`,
         };
@@ -510,23 +507,17 @@ interface ChatMessage {
                       <div key={index} className="flex justify-start">
                         <div className="max-w-xs lg:max-w-md xl:max-w-lg w-full">
                           <div
-                            className={`chat-message backdrop-blur-sm rounded-2xl rounded-tl-md shadow-lg px-4 py-3 break-words ${
-                              message.type === "system" ? "bg-gray-800 bg-opacity-90" : "bg-gray-800 bg-opacity-70"
-                            }`}
+                            className={`chat-message backdrop-blur-sm rounded-2xl rounded-tl-md shadow-lg px-4 py-3 break-words bg-gray-800 bg-opacity-70`}
                             style={getMessageStyle(message)}
                           >
-                            {message.type === "chat" && (
-                              <p className="text-xs font-semibold mb-1 break-words" style={{ color: message.color }}>
-                                {message.username}
-                              </p>
-                            )}
+                            <p className="text-xs font-semibold mb-1 break-words" style={{ color: message.color }}>
+                              {message.username}
+                            </p>
                             <p className="text-gray-100 text-sm leading-relaxed break-words overflow-wrap-anywhere">
                               {message.message}
                             </p>
                             <p className="text-xs text-gray-400 mt-1">
-                              {message.type === "chat"
-                                ? new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                                : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                             </p>
                           </div>
                         </div>
