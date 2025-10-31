@@ -84,7 +84,12 @@ interface ChatMessage {
   const joinTokenRef = useRef<string | null>(null);
   const [currentPoll, setCurrentPoll] = useState<null | { question: string; options: { text: string; votes: number }[]; userVote?: number }>(null);
   const [pollQuestion, setPollQuestion] = useState<string>("");
-  const [pollOptionsText, setPollOptionsText] = useState<string>("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]); // up to 5
+  const [pollNotice, setPollNotice] = useState<string>("");
+  const showPollNotice = (msg: string): void => {
+    setPollNotice(msg);
+    setTimeout(() => setPollNotice(""), 2000);
+  };
 
     const scrollToBottom = (): void => {
       const el = messagesContainerRef.current;
@@ -368,22 +373,29 @@ interface ChatMessage {
     // --- Poll actions ---
     const handleCreatePoll = (): void => {
       if (!wsRef.current || !isAdmin) return;
-      const options = pollOptionsText
-        .split(/\n|,/)
-        .map((s) => s.trim())
-        .filter((s) => s);
+      const options = pollOptions.map((s) => s.trim()).filter((s) => s);
+      if (!pollQuestion.trim() || options.length < 2) {
+        showPollNotice("Provide a question and at least 2 options.");
+        return;
+      }
+      if (options.length > 5) {
+        showPollNotice("Maximum 5 options allowed.");
+        return;
+      }
       wsRef.current.send(
         JSON.stringify({
           type: "createPoll",
-          payload: { roomId: currentRoomId, question: pollQuestion, options },
+          payload: { roomId: currentRoomId, question: pollQuestion.trim(), options },
         })
       );
       setPollQuestion("");
-      setPollOptionsText("");
+      setPollOptions(["", ""]);
     };
 
     const handleVotePoll = (index: number): void => {
       if (!wsRef.current) return;
+      // prevent voting again on client side once voted
+      if (currentPoll && typeof currentPoll.userVote === "number") return;
       wsRef.current.send(
         JSON.stringify({ type: "votePoll", payload: { roomId: currentRoomId, optionIndex: index } })
       );
@@ -447,24 +459,22 @@ interface ChatMessage {
     <div className="w-full max-w-7xl h-full min-h-0 grid grid-cols-12 gap-4">
           {/* Left panel */}
           <div className="col-span-12 sm:col-span-3 border border-sky-500/40 rounded-3xl p-4 bg-black/40">
-            <div className="space-y-6 text-sky-300">
-              <div>
-                <h3 className="text-lg font-semibold text-sky-300">Join a Public Room</h3>
+            <div className="text-sky-300 h-full flex flex-col justify-between">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-sky-300">Join a Public Room</h3>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-sky-300">Join a Private Room</h3>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-sky-300">Join a Private Room</h3>
-                <p className="text-xs text-sky-400/70 pl-4">Verify your email to join a Private Room</p>
-              </div>
-
-              <div className="pt-8">
+              <div className="mt-8 space-y-3">
                 <button
                   onClick={handleCreateOrCopyLink}
                   className="w-full px-4 py-2 rounded-xl border border-sky-400/60 text-sky-200 hover:bg-sky-500/10 transition"
                 >
                   {shareLink ? "Share the Room Link" : "Create & Share Private Room"}
                 </button>
-              </div>
-              <div>
                 <button
                   onClick={handleEndRoom}
                   disabled={!isAdmin}
@@ -624,21 +634,29 @@ interface ChatMessage {
                   <p className="text-sky-200 font-medium">{currentPoll.question}</p>
                   <div className="space-y-2">
                     {currentPoll.options.map((opt, idx) => (
-                      <div key={idx} className="flex items-center justify-between gap-2">
-                        <div className="flex-1 text-sky-200 text-sm">{opt.text}</div>
+                      <label key={idx} className="flex items-center justify-between gap-2 cursor-pointer">
+                        <div className="flex items-center gap-2 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={currentPoll.userVote === idx}
+                            onChange={() => handleVotePoll(idx)}
+                            disabled={typeof currentPoll.userVote === "number"}
+                            className="h-4 w-4 accent-sky-400"
+                          />
+                          <span className="text-sky-200 text-sm">{opt.text}</span>
+                        </div>
                         <div className="text-sky-400 text-xs min-w-[2rem] text-right">{opt.votes}</div>
-                        <button
-                          onClick={() => handleVotePoll(idx)}
-                          className={`px-2 py-1 rounded-md border ${currentPoll.userVote === idx ? "border-emerald-400/60 text-emerald-300" : "border-sky-400/60 text-sky-200"}`}
-                        >
-                          {currentPoll.userVote === idx ? "Voted" : "Vote"}
-                        </button>
-                      </div>
+                      </label>
                     ))}
                   </div>
-                  {isAdmin && (
-                    <button onClick={handleEndPoll} className="w-full px-3 py-2 rounded-md border border-rose-400/60 text-rose-200">End Poll</button>
-                  )}
+                  <div className="space-y-2">
+                    {isAdmin && (
+                      <>
+                        <button onClick={handleEndPoll} className="w-full px-3 py-2 rounded-md border border-rose-400/60 text-rose-200">End Poll</button>
+                        {pollNotice && <p className="text-xs text-rose-300 text-center">{pollNotice}</p>}
+                      </>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -651,13 +669,41 @@ interface ChatMessage {
                         onChange={(e) => setPollQuestion(e.target.value)}
                         className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
                       />
-                      <textarea
-                        placeholder="Options (one per line or comma separated)"
-                        value={pollOptionsText}
-                        onChange={(e) => setPollOptionsText(e.target.value)}
-                        className="w-full h-24 px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
-                      />
+                      <div className="space-y-2">
+                        {pollOptions.map((opt, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              placeholder={`Option ${idx + 1}`}
+                              value={opt}
+                              onChange={(e) => {
+                                const next = [...pollOptions];
+                                next[idx] = e.target.value;
+                                setPollOptions(next);
+                              }}
+                              className="flex-1 px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
+                            />
+                            {pollOptions.length > 2 && (
+                              <button
+                                onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                                className="px-2 py-1 rounded-md border border-rose-400/60 text-rose-200"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {pollOptions.length < 5 && (
+                          <button
+                            onClick={() => setPollOptions([...pollOptions, ""]) }
+                            className="w-full px-3 py-2 rounded-md border border-sky-400/60 text-sky-200"
+                          >
+                            Add Option
+                          </button>
+                        )}
+                      </div>
                       <button onClick={handleCreatePoll} className="w-full px-3 py-2 rounded-md border border-sky-400/60 text-sky-200">Create Poll</button>
+                      {pollNotice && <p className="text-xs text-rose-300 text-center">{pollNotice}</p>}
                     </>
                   ) : (
                     <p className="text-xs text-sky-400/70">No active poll.</p>
