@@ -1,25 +1,23 @@
+import { HeaderBar } from "./landing/HeaderBar.tsx";
+import { Hero } from "./landing/Hero.tsx";
+import { PublicCard } from "./landing/PublicCard.tsx";
+import { PrivateCard } from "./landing/PrivateCard.tsx";
+
 interface LandingPageProps {
   onJoinPublic: () => void;
-  onOpenPrivate: () => void;
+  onCreatePrivate: () => void;
+  onJoinWithLink: (value: string) => void;
 }
 
-export function LandingPage({ onJoinPublic, onOpenPrivate }: LandingPageProps) {
+export function LandingPage({ onJoinPublic, onCreatePrivate, onJoinWithLink }: LandingPageProps) {
   return (
-    <div className="w-full max-w-3xl h-full min-h-0 grid place-items-center">
-      <div className="w-full max-w-xl border border-sky-500/40 rounded-3xl bg-black/40 p-8 text-sky-300">
-        <div className="flex flex-col items-center gap-6">
-          <button
-            onClick={onJoinPublic}
-            className="w-80 px-6 py-3 rounded-xl border border-sky-400/60 hover:bg-sky-500/10"
-          >
-            Join a Public Room
-          </button>
-          <button
-            onClick={onOpenPrivate}
-            className="w-80 px-6 py-3 rounded-xl border border-sky-400/60 hover:bg-sky-500/10"
-          >
-            Join a Private Room
-          </button>
+    <div className="h-full w-full overflow-y-auto flex flex-col items-center px-4 py-6 text-sky-100">
+      <div className="w-full max-w-5xl">
+        <HeaderBar />
+        <Hero />
+        <div className="mt-6 space-y-6">
+          <PublicCard onJoinPublic={onJoinPublic} />
+          <PrivateCard onCreatePrivate={onCreatePrivate} onJoinWithLink={onJoinWithLink} />
         </div>
       </div>
     </div>

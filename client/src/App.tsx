@@ -166,15 +166,34 @@ interface ChatMessage {
           } else if (parsedMessage.type === "userColor") {
             setUserColor(parsedMessage.color);
           } else if (parsedMessage.type === "roomCreated") {
-            setIsAdmin(true);
-            setCurrentRoomId(parsedMessage.roomId);
-            const full = `${window.location.origin}/${
-              parsedMessage.link.startsWith("?")
-                ? parsedMessage.link
-                : `?room=${parsedMessage.roomId}`
-            }`;
-            setShareLink(full);
-            showLeftNotice(`Room created. Share this link: ${full}`);
+                setIsAdmin(true);
+                // Build full share URL and extract the token so auto-join uses it
+                const full = `${window.location.origin}/${
+                  parsedMessage.link.startsWith("?")
+                    ? parsedMessage.link
+                    : `?room=${parsedMessage.roomId}`
+                }`;
+                let tokenFromLink: string | null = null;
+                try {
+                  const u = new URL(full);
+                  tokenFromLink = u.searchParams.get("token");
+                } catch {
+                  tokenFromLink = null;
+                }
+                if (tokenFromLink) {
+                  joinTokenRef.current = tokenFromLink;
+                }
+                setCurrentRoomId(parsedMessage.roomId);
+                setShareLink(full);
+                // optional: reflect the new room + token in browser URL for consistency
+                try {
+                  const linkOnly = parsedMessage.link.startsWith("?")
+                    ? parsedMessage.link
+                    : `?room=${parsedMessage.roomId}${tokenFromLink ? `&token=${tokenFromLink}` : ""}`;
+                  window.history.pushState({}, "", linkOnly);
+    } catch {/* no-op */}
+    // Show this as a transient left notification only, not in the chat feed
+    showLeftNotice(`Room created. Share this link: ${full}`);
           } else if (
             parsedMessage.type === "system" ||
             parsedMessage.type === "chat"
@@ -322,34 +341,36 @@ interface ChatMessage {
       }
     };
 
-    const openPrivateModal = (): void => {
-      setPrivateLinkInput("");
-      setShowPrivateLinkModal(true);
-    };
-
-    const handlePrivateJoin = (): void => {
+    const handleJoinWithLink = (value: string): void => {
+      let roomParam: string | null = null;
+      let tokenParam: string | null = null;
+      const raw = (value || "").trim();
+      if (!raw) return;
       try {
-        const url = new URL(privateLinkInput);
-        const roomParam = url.searchParams.get("room");
-        const tokenParam = url.searchParams.get("token");
-        if (!roomParam || !tokenParam) return;
-        setCurrentRoomId(roomParam);
-        joinTokenRef.current = tokenParam;
-        const newSearch = `?room=${roomParam}&token=${tokenParam}`;
-        window.history.pushState({}, "", newSearch);
-        setShowPrivateLinkModal(false);
-        setShowLanding(false);
-        setReadyToJoin(true);
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(
-            JSON.stringify({
-              type: "join",
-              payload: { roomId: roomParam, token: tokenParam },
-            })
-          );
-        }
+        // Support full URLs (preferred)
+        const url = raw.startsWith("http") ? new URL(raw) : new URL(window.location.origin + "/" + (raw.startsWith("?") ? raw : `?${raw}`));
+        roomParam = url.searchParams.get("room");
+        tokenParam = url.searchParams.get("token");
       } catch {
-        // ignore malformed URL
+        // Fallback: support "roomId:token" pattern
+        if (raw.includes(":")) {
+          const [r, t] = raw.split(":");
+          roomParam = r || null;
+          tokenParam = t || null;
+        }
+      }
+      if (!roomParam || !tokenParam) return;
+      setCurrentRoomId(roomParam);
+      joinTokenRef.current = tokenParam;
+      const newSearch = `?room=${roomParam}&token=${tokenParam}`;
+  try { window.history.pushState({}, "", newSearch); } catch { /* no-op */ }
+      setShowPrivateLinkModal(false);
+      setShowLanding(false);
+      setReadyToJoin(true);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({ type: "join", payload: { roomId: roomParam, token: tokenParam } })
+        );
       }
     };
 
@@ -416,7 +437,7 @@ interface ChatMessage {
 
     const handleVotePoll = (index: number): void => {
       if (!wsRef.current) return;
-      // prevent voting again on client side once voted
+      // users can't vote again, if already voted
       if (currentPoll && typeof currentPoll.userVote === "number") return;
       wsRef.current.send(
         JSON.stringify({ type: "votePoll", payload: { roomId: currentRoomId, optionIndex: index } })
@@ -459,7 +480,11 @@ interface ChatMessage {
         }}
       >
     {showLanding ? (
-      <LandingPage onJoinPublic={joinPublic} onOpenPrivate={openPrivateModal} />
+      <LandingPage
+        onJoinPublic={joinPublic}
+        onCreatePrivate={() => handleCreateOrCopyLink()}
+        onJoinWithLink={(val) => handleJoinWithLink(val)}
+      />
     ) : (
     <div className="w-full max-w-7xl h-full min-h-0 grid grid-cols-12 gap-4">
           {/* Left panel */}
@@ -574,7 +599,7 @@ interface ChatMessage {
             />
             <div className="flex items-center gap-2 justify-end">
               <button onClick={() => setShowPrivateLinkModal(false)} className="px-3 py-2 rounded-md border border-gray-500/60">Cancel</button>
-              <button onClick={handlePrivateJoin} className="px-3 py-2 rounded-md border border-sky-400/60">Continue</button>
+              <button onClick={() => handleJoinWithLink(privateLinkInput)} className="px-3 py-2 rounded-md border border-sky-400/60">Continue</button>
             </div>
           </div>
         </div>
