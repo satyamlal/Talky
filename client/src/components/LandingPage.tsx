@@ -11,7 +11,7 @@ interface LandingPageProps {
 
 export function LandingPage({ onJoinPublic, onCreatePrivate, onJoinWithLink }: LandingPageProps) {
   return (
-    <div className="h-full w-full overflow-y-auto flex flex-col items-center px-4 py-6 text-sky-100">
+    <div className="min-h-screen w-full flex flex-col items-center px-4 py-6 text-sky-100">
       <div className="w-full max-w-5xl">
         <HeaderBar />
         <Hero />

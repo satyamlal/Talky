@@ -341,6 +341,9 @@ interface ChatMessage {
       }
     };
 
+    // Legacy modal join flow not used on the new landing page
+  // Legacy modal join flow removed in favor of on-page join with link
+
     const handleJoinWithLink = (value: string): void => {
       let roomParam: string | null = null;
       let tokenParam: string | null = null;
@@ -437,7 +440,7 @@ interface ChatMessage {
 
     const handleVotePoll = (index: number): void => {
       if (!wsRef.current) return;
-      // users can't vote again, if already voted
+      // prevent voting again on client side once voted
       if (currentPoll && typeof currentPoll.userVote === "number") return;
       wsRef.current.send(
         JSON.stringify({ type: "votePoll", payload: { roomId: currentRoomId, optionIndex: index } })
