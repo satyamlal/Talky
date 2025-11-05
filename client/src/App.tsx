@@ -59,6 +59,8 @@ interface ChatMessage {
       question: string;
       options: { text: string; votes: number }[];
       userVote?: number;
+      votersCount?: number;
+      totalEligible?: number;
     };
   }
 

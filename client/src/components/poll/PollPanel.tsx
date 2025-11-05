@@ -4,6 +4,8 @@ export interface CurrentPoll {
   question: string;
   options: { text: string; votes: number }[];
   userVote?: number;
+  votersCount?: number;
+  totalEligible?: number;
 }
 
 interface PollPanelProps {
@@ -36,23 +38,49 @@ export function PollPanel({
       <h3 className="text-lg font-semibold">Polls</h3>
       {currentPoll ? (
         <div className="space-y-3">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs text-sky-400">
+              <span>
+                Polls {currentPoll.votersCount ?? 0}/{currentPoll.totalEligible ?? 0}
+              </span>
+              <span>
+                {(() => {
+                  const a = currentPoll.votersCount ?? 0;
+                  const b = currentPoll.totalEligible ?? 0;
+                  const pct = b > 0 ? Math.round((a / b) * 100) : 0;
+                  return `${pct}% users have voted till now...`;
+                })()}
+              </span>
+            </div>
+          </div>
           <p className="text-sky-200 font-medium">{currentPoll.question}</p>
           <div className="space-y-2">
-            {currentPoll.options.map((opt, idx) => (
-              <label key={idx} className="flex items-center justify-between gap-2 cursor-pointer">
-                <div className="flex items-center gap-2 flex-1">
-                  <input
-                    type="checkbox"
-                    checked={currentPoll.userVote === idx}
-                    onChange={() => onVote(idx)}
-                    disabled={typeof currentPoll.userVote === "number"}
-                    className="h-4 w-4 accent-sky-400"
-                  />
-                  <span className="text-sky-200 text-sm">{opt.text}</span>
-                </div>
-                <div className="text-sky-400 text-xs min-w-[2rem] text-right">{opt.votes}</div>
-              </label>
-            ))}
+            {currentPoll.options.map((opt, idx) => {
+              const totalVotes = (currentPoll.options || []).reduce((sum, o) => sum + (o.votes || 0), 0);
+              const voters = currentPoll.votersCount ?? totalVotes;
+              const share = voters > 0 ? Math.round(((opt.votes || 0) / voters) * 100) : 0;
+              const canVote = !isAdmin && typeof currentPoll.userVote !== "number";
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => canVote && onVote(idx)}
+                  disabled={!canVote}
+                  className="w-full text-left"
+                >
+                  <div className="relative w-full rounded-md border border-sky-500/30 bg-[#0b1220] px-3 py-2 overflow-hidden">
+                    <div
+                      className="absolute inset-y-0 left-0 bg-sky-500/30"
+                      style={{ width: `${share}%` }}
+                    />
+                    <div className="relative flex items-center justify-between">
+                      <span className="text-sky-100 text-sm">{opt.text}</span>
+                      <span className="text-sky-300 text-xs">{opt.votes} ({share}%)</span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
           {isAdmin && (
             <>
@@ -98,7 +126,14 @@ export function PollPanel({
                 ))}
                 {pollOptions.length < 5 && (
                   <button
-                    onClick={() => setPollOptions([...pollOptions, ""]) }
+                    onClick={() => {
+                      setPollOptions([...pollOptions, ""]);
+                      // focus the newly added option after render
+                      setTimeout(() => {
+                        const inputs = document.querySelectorAll<HTMLInputElement>("input[placeholder^='Option']");
+                        inputs[inputs.length - 1]?.focus();
+                      }, 0);
+                    }}
                     className="w-full px-3 py-2 rounded-md border border-sky-400/60 text-sky-200"
                   >
                     Add Option

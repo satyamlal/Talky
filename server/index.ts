@@ -220,6 +220,11 @@ const sendPollToUser = (socket: WebSocket, room: Room): void => {
     socket.send(JSON.stringify({ type: "pollUpdated", roomId: room.id, poll: null }));
     return;
   }
+  // derive counts for participation
+  const usersInRoom = allSockets.filter((u) => u.room === room.id);
+  const adminPresent = usersInRoom.some((u) => u.userId === room.adminUserId);
+  const totalEligible = Math.max(0, usersInRoom.length - (adminPresent ? 1 : 0));
+  const votersCount = poll.votesByUserId.size;
   const userVote = poll.votesByUserId.get(user.userId);
   socket.send(
     JSON.stringify({
@@ -229,6 +234,8 @@ const sendPollToUser = (socket: WebSocket, room: Room): void => {
         question: poll.question,
         options: poll.options.map((o) => ({ text: o.text, votes: o.votes })),
         userVote,
+        votersCount,
+        totalEligible,
       },
     })
   );
@@ -643,6 +650,11 @@ wss.on("connection", (socket, req) => {
       if (!room || !room.poll || !voter || voter.room !== roomId) return;
       const poll = room.poll!;
       if (optionIndex < 0 || optionIndex >= poll.options.length) return;
+      // Admin cannot vote
+      if (voter.userId === room.adminUserId) {
+        socket.send(JSON.stringify({ type: "system", message: "Admin cannot vote in this poll." }));
+        return;
+      }
       // Disallow changing vote once cast
       if (poll.votesByUserId.has(voter.userId)) {
         socket.send(JSON.stringify({ type: "system", message: "You have already voted." }));
@@ -650,6 +662,21 @@ wss.on("connection", (socket, req) => {
       }
       poll.votesByUserId.set(voter.userId, optionIndex);
       poll.options[optionIndex]!.votes += 1;
+      // Auto-end when all eligible users have voted
+      const usersInRoom = allSockets.filter((u) => u.room === roomId);
+      const adminPresent = usersInRoom.some((u) => u.userId === room.adminUserId);
+      const totalEligible = Math.max(0, usersInRoom.length - (adminPresent ? 1 : 0));
+      const votersCount = poll.votesByUserId.size;
+      if (totalEligible > 0 && votersCount >= totalEligible) {
+        // Notify and end poll
+        const msg = JSON.stringify({ type: "system", message: "Voting completed with 100% participation!" });
+        allSockets.filter((u) => u.room === roomId).forEach((u) => {
+          try { u.socket.send(msg); } catch {}
+        });
+        delete room.poll;
+        broadcastPoll(roomId);
+        return;
+      }
       broadcastPoll(roomId);
       return;
     }
