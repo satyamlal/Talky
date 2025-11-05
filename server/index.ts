@@ -92,7 +92,13 @@ interface Room {
     question: string;
     options: { text: string; votes: number }[];
     votesByUserId: Map<string, number>;
+    ended?: boolean;
   };
+  pollHistory?: Array<{
+    question: string;
+    options: { text: string; votes: number }[];
+    endedAt: number;
+  }>;
 }
 
 const rooms = new Map<string, Room>();
@@ -137,7 +143,8 @@ type ExtendedMessageType =
   | VerifyOtpMessage
   | CreatePollMessage
   | VotePollMessage
-  | EndPollMessage;
+  | EndPollMessage
+  | RestartPollMessage;
 
 interface CreatePollMessage {
   type: "createPoll";
@@ -160,6 +167,14 @@ interface EndPollMessage {
   type: "endPoll";
   payload: {
     roomId: string;
+  };
+}
+
+interface RestartPollMessage {
+  type: "restartPoll";
+  payload: {
+    roomId: string;
+    historyIndex: number; // index based on latest-first ordering
   };
 }
 
@@ -217,7 +232,7 @@ const sendPollToUser = (socket: WebSocket, room: Room): void => {
   const user = allSockets.find((x) => x.socket === socket);
   if (!user) return;
   if (!poll) {
-    socket.send(JSON.stringify({ type: "pollUpdated", roomId: room.id, poll: null }));
+    socket.send(JSON.stringify({ type: "pollUpdated", roomId: room.id, poll: null, pollHistory: (room.pollHistory || []).slice().reverse() }));
     return;
   }
   // derive counts for participation
@@ -236,7 +251,9 @@ const sendPollToUser = (socket: WebSocket, room: Room): void => {
         userVote,
         votersCount,
         totalEligible,
+        ended: !!poll.ended,
       },
+      pollHistory: (room.pollHistory || []).slice().reverse(),
     })
   );
 };
@@ -249,7 +266,7 @@ const broadcastPoll = (roomId: string): void => {
       sendPollToUser(u.socket, room);
     } else {
       u.socket.send(
-        JSON.stringify({ type: "pollUpdated", roomId, poll: null })
+        JSON.stringify({ type: "pollUpdated", roomId, poll: null, pollHistory: (room?.pollHistory || []).slice().reverse() })
       );
     }
   });
@@ -633,6 +650,15 @@ wss.on("connection", (socket, req) => {
         socket.send(JSON.stringify({ type: "system", message: "Maximum 5 options allowed." }));
         return;
       }
+      // If an existing poll is present, archive it to history before replacing
+      if (room.poll) {
+        if (!room.pollHistory) room.pollHistory = [];
+        room.pollHistory.push({
+          question: room.poll.question,
+          options: room.poll.options.map((o) => ({ text: o.text, votes: o.votes })),
+          endedAt: Date.now(),
+        });
+      }
       room.poll = {
         question: question.trim(),
         options: cleanOptions.map((text) => ({ text, votes: 0 })),
@@ -668,12 +694,12 @@ wss.on("connection", (socket, req) => {
       const totalEligible = Math.max(0, usersInRoom.length - (adminPresent ? 1 : 0));
       const votersCount = poll.votesByUserId.size;
       if (totalEligible > 0 && votersCount >= totalEligible) {
-        // Notify and end poll
+        // Notify and mark poll as ended (do not delete; keep visible)
         const msg = JSON.stringify({ type: "system", message: "Voting completed with 100% participation!" });
         allSockets.filter((u) => u.room === roomId).forEach((u) => {
           try { u.socket.send(msg); } catch {}
         });
-        delete room.poll;
+        poll.ended = true;
         broadcastPoll(roomId);
         return;
       }
@@ -691,7 +717,51 @@ wss.on("connection", (socket, req) => {
         socket.send(JSON.stringify({ type: "system", message: "Only admin can end the poll." }));
         return;
       }
-      delete room.poll;
+      if (room.poll) {
+        room.poll.ended = true;
+      }
+      broadcastPoll(roomId);
+      return;
+    }
+
+    // Restart Poll from history (admin-only)
+    if (parsedMessage.type === "restartPoll") {
+      const { roomId, historyIndex } = parsedMessage.payload;
+      const room = rooms.get(roomId);
+      const requester = allSockets.find((x) => x.socket === socket);
+      if (!room || !requester || requester.room !== roomId) return;
+      if (requester.userId !== room.adminUserId) {
+        socket.send(JSON.stringify({ type: "system", message: "Only admin can restart a poll." }));
+        return;
+      }
+      const hist = room.pollHistory || [];
+      if (hist.length === 0) {
+        socket.send(JSON.stringify({ type: "system", message: "No poll history to restart from." }));
+        return;
+      }
+      // historyIndex is based on latest-first
+      const latestFirst = hist.slice().reverse();
+      const selected = latestFirst[historyIndex];
+      if (!selected) {
+        socket.send(JSON.stringify({ type: "system", message: "Invalid history index." }));
+        return;
+      }
+      // Archive current poll if present
+      if (room.poll) {
+        if (!room.pollHistory) room.pollHistory = [];
+        room.pollHistory.push({
+          question: room.poll.question,
+          options: room.poll.options.map((o) => ({ text: o.text, votes: o.votes })),
+          endedAt: Date.now(),
+        });
+      }
+      // Start a fresh copy of selected poll
+      room.poll = {
+        question: selected.question,
+        options: selected.options.map((o) => ({ text: o.text, votes: 0 })),
+        votesByUserId: new Map<string, number>(),
+        ended: false,
+      };
       broadcastPoll(roomId);
       return;
     }

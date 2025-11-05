@@ -61,7 +61,9 @@ interface ChatMessage {
       userVote?: number;
       votersCount?: number;
       totalEligible?: number;
+      ended?: boolean;
     };
+    pollHistory?: { question: string; options: { text: string; votes: number }[]; endedAt: number }[];
   }
 
   type Message =
@@ -93,6 +95,7 @@ interface ChatMessage {
   const inputRef = useRef<HTMLInputElement>(null);
   const joinTokenRef = useRef<string | null>(null);
   const [currentPoll, setCurrentPoll] = useState<CurrentPoll | null>(null);
+  const [pollHistory, setPollHistory] = useState<{ question: string; options: { text: string; votes: number }[]; endedAt: number }[]>([]);
   const [pollQuestion, setPollQuestion] = useState<string>("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]); // up to 5
   const [pollNotice, setPollNotice] = useState<string>("");
@@ -211,6 +214,7 @@ interface ChatMessage {
             }
           } else if (parsedMessage.type === "pollUpdated") {
             setCurrentPoll(parsedMessage.poll);
+            setPollHistory(parsedMessage.pollHistory || []);
           } else if (parsedMessage.type === "needVerification") {
             setShowVerifyModal(true);
             setPendingRoomId(parsedMessage.roomId);
@@ -456,6 +460,13 @@ interface ChatMessage {
       );
     };
 
+    const handleRestartPoll = (historyIndex: number): void => {
+      if (!wsRef.current || !isAdmin) return;
+      wsRef.current.send(
+        JSON.stringify({ type: "restartPoll", payload: { roomId: currentRoomId, historyIndex } })
+      );
+    };
+
     const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>): void => {
       if (e.key === "Enter") {
         handleSendMessage();
@@ -511,7 +522,7 @@ interface ChatMessage {
             </div>
           </div>
 
-          {/* Center (original chat window, unchanged) */}
+          {/* Center (original chat window */}
           <div className="col-span-12 sm:col-span-6 flex items-stretch min-h-0">
             <div className="w-full max-w-4xl mx-auto h-full min-h-0 flex flex-col bg-black border border-[#25304a] rounded-3xl overflow-hidden">
               {/* Header */}
@@ -554,7 +565,6 @@ interface ChatMessage {
                       </div>
                     ))
                   )}
-                  {/* sentinel removed; container scroll is controlled programmatically */}
                 </div>
               </div>
 
@@ -578,6 +588,7 @@ interface ChatMessage {
             <PollPanel
               isAdmin={isAdmin}
               currentPoll={currentPoll}
+              pollHistory={pollHistory}
               pollQuestion={pollQuestion}
               setPollQuestion={setPollQuestion}
               pollOptions={pollOptions}
@@ -585,6 +596,7 @@ interface ChatMessage {
               onCreatePoll={handleCreatePoll}
               onVote={handleVotePoll}
               onEndPoll={handleEndPoll}
+              onRestartPoll={handleRestartPoll}
               notice={pollNotice}
             />
           </div>

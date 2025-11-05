@@ -6,11 +6,13 @@ export interface CurrentPoll {
   userVote?: number;
   votersCount?: number;
   totalEligible?: number;
+  ended?: boolean;
 }
 
 interface PollPanelProps {
   isAdmin: boolean;
   currentPoll: CurrentPoll | null;
+  pollHistory?: { question: string; options: { text: string; votes: number }[]; endedAt: number }[];
   pollQuestion: string;
   setPollQuestion: (v: string) => void;
   pollOptions: string[];
@@ -18,12 +20,14 @@ interface PollPanelProps {
   onCreatePoll: () => void;
   onVote: (idx: number) => void;
   onEndPoll: () => void;
+  onRestartPoll?: (historyIndex: number) => void;
   notice?: string;
 }
 
 export function PollPanel({
   isAdmin,
   currentPoll,
+  pollHistory,
   pollQuestion,
   setPollQuestion,
   pollOptions,
@@ -31,6 +35,7 @@ export function PollPanel({
   onCreatePoll,
   onVote,
   onEndPoll,
+  onRestartPoll,
   notice,
 }: PollPanelProps) {
   return (
@@ -41,25 +46,28 @@ export function PollPanel({
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs text-sky-400">
               <span>
-                Polls {currentPoll.votersCount ?? 0}/{currentPoll.totalEligible ?? 0}
+                Total Users: {currentPoll.votersCount ?? 0}/{currentPoll.totalEligible ?? 0}
               </span>
               <span>
                 {(() => {
                   const a = currentPoll.votersCount ?? 0;
                   const b = currentPoll.totalEligible ?? 0;
                   const pct = b > 0 ? Math.round((a / b) * 100) : 0;
-                  return `${pct}% users have voted till now...`;
+                  return `${pct}% users have voted!`;
                 })()}
               </span>
             </div>
           </div>
           <p className="text-sky-200 font-medium">{currentPoll.question}</p>
+          {currentPoll.ended && (
+            <p className="text-xs text-amber-300">This poll has ended.</p>
+          )}
           <div className="space-y-2">
             {currentPoll.options.map((opt, idx) => {
               const totalVotes = (currentPoll.options || []).reduce((sum, o) => sum + (o.votes || 0), 0);
               const voters = currentPoll.votersCount ?? totalVotes;
               const share = voters > 0 ? Math.round(((opt.votes || 0) / voters) * 100) : 0;
-              const canVote = !isAdmin && typeof currentPoll.userVote !== "number";
+              const canVote = !isAdmin && typeof currentPoll.userVote !== "number" && !currentPoll.ended;
               return (
                 <button
                   key={idx}
@@ -84,8 +92,28 @@ export function PollPanel({
           </div>
           {isAdmin && (
             <>
-              <button onClick={onEndPoll} className="w-full px-3 py-2 rounded-md border border-rose-400/60 text-rose-200">End Poll</button>
+              {!currentPoll.ended && (
+                <button onClick={onEndPoll} className="w-full px-3 py-2 rounded-md border border-rose-400/60 text-rose-200">End Poll</button>
+              )}
               <Notifications message={notice} tone="error" />
+              {/* Recent polls list (admin only) */}
+              {(pollHistory && pollHistory.length > 0) && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-sm text-sky-400">Recent Polls</p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {pollHistory.map((p, idx) => (
+                      <div key={idx} className="p-2 rounded-md border border-sky-500/30 bg-[#0b1220]">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-sky-200 line-clamp-2">{p.question}</span>
+                          {onRestartPoll && (
+                            <button onClick={() => onRestartPoll(idx)} className="px-2 py-1 rounded-md border border-emerald-400/60 text-emerald-200 text-xs">Restart</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -142,6 +170,23 @@ export function PollPanel({
               </div>
               <button onClick={onCreatePoll} className="w-full px-3 py-2 rounded-md border border-sky-400/60 text-sky-200">Create Poll</button>
               <Notifications message={notice} tone="error" />
+              {(pollHistory && pollHistory.length > 0) && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-sm text-sky-400">Recent Polls</p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {pollHistory.map((p, idx) => (
+                      <div key={idx} className="p-2 rounded-md border border-sky-500/30 bg-[#0b1220]">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-sky-200 line-clamp-2">{p.question}</span>
+                          {onRestartPoll && (
+                            <button onClick={() => onRestartPoll(idx)} className="px-2 py-1 rounded-md border border-emerald-400/60 text-emerald-200 text-xs">Restart</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <p className="text-xs text-sky-400/70">No active poll.</p>

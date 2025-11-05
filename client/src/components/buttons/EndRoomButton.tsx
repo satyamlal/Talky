@@ -8,7 +8,7 @@ export function EndRoomButton({ isAdmin, onClick }: EndRoomButtonProps) {
     <button
       onClick={onClick}
       disabled={!isAdmin}
-      className="w-full px-4 py-2 rounded-xl border border-rose-400/60 text-rose-200 disabled:opacity-40"
+      className="w-full px-4 py-2 rounded-xl border border-rose-400/60 text-rose-200 disabled:opacity-40 hover:bg-rose-400/60 hover:text-rose-100"
       title={isAdmin ? "Only admin can end the room" : "Create a room first to enable"}
     >
       End this room
