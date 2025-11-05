@@ -63,7 +63,7 @@ interface ChatMessage {
       totalEligible?: number;
       ended?: boolean;
     };
-    pollHistory?: { question: string; options: { text: string; votes: number }[]; endedAt: number }[];
+    pollHistory?: { question: string; options: { text: string; votes: number }[]; endedAt: number; votersCount?: number; totalEligible?: number }[];
   }
 
   type Message =
@@ -95,7 +95,7 @@ interface ChatMessage {
   const inputRef = useRef<HTMLInputElement>(null);
   const joinTokenRef = useRef<string | null>(null);
   const [currentPoll, setCurrentPoll] = useState<CurrentPoll | null>(null);
-  const [pollHistory, setPollHistory] = useState<{ question: string; options: { text: string; votes: number }[]; endedAt: number }[]>([]);
+  const [pollHistory, setPollHistory] = useState<{ question: string; options: { text: string; votes: number }[]; endedAt: number; votersCount?: number; totalEligible?: number }[]>([]);
   const [pollQuestion, setPollQuestion] = useState<string>("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]); // up to 5
   const [pollNotice, setPollNotice] = useState<string>("");
@@ -462,9 +462,15 @@ interface ChatMessage {
 
     const handleRestartPoll = (historyIndex: number): void => {
       if (!wsRef.current || !isAdmin) return;
-      wsRef.current.send(
-        JSON.stringify({ type: "restartPoll", payload: { roomId: currentRoomId, historyIndex } })
-      );
+      if (historyIndex === -1) {
+        wsRef.current.send(
+          JSON.stringify({ type: "restartCurrentPoll", payload: { roomId: currentRoomId } })
+        );
+      } else {
+        wsRef.current.send(
+          JSON.stringify({ type: "restartPoll", payload: { roomId: currentRoomId, historyIndex } })
+        );
+      }
     };
 
     const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>): void => {

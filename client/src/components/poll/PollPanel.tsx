@@ -12,7 +12,7 @@ export interface CurrentPoll {
 interface PollPanelProps {
   isAdmin: boolean;
   currentPoll: CurrentPoll | null;
-  pollHistory?: { question: string; options: { text: string; votes: number }[]; endedAt: number }[];
+  pollHistory?: { question: string; options: { text: string; votes: number }[]; endedAt: number; votersCount?: number; totalEligible?: number }[];
   pollQuestion: string;
   setPollQuestion: (v: string) => void;
   pollOptions: string[];
@@ -53,12 +53,12 @@ export function PollPanel({
                   const a = currentPoll.votersCount ?? 0;
                   const b = currentPoll.totalEligible ?? 0;
                   const pct = b > 0 ? Math.round((a / b) * 100) : 0;
-                  return `${pct}% users have voted!`;
+                  return `${pct}% participation!`;
                 })()}
               </span>
             </div>
           </div>
-          <p className="text-sky-200 font-medium">{currentPoll.question}</p>
+          <p className="text-sky-200 font-medium">Question: {currentPoll.question}</p>
           {currentPoll.ended && (
             <p className="text-xs text-amber-300">This poll has ended.</p>
           )}
@@ -95,22 +95,86 @@ export function PollPanel({
               {!currentPoll.ended && (
                 <button onClick={onEndPoll} className="w-full px-3 py-2 rounded-md border border-rose-400/60 text-rose-200">End Poll</button>
               )}
+              {/* When poll has ended, show create form and restart current */}
+              {currentPoll.ended && (
+                <div className="space-y-3 mt-2">
+                  <div className="flex items-center gap-2">
+                    {onRestartPoll && (
+                      <button onClick={() => onRestartPoll(-1)} className="px-3 py-2 rounded-md border border-emerald-400/60 text-emerald-200">Restart This Poll</button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Poll question"
+                    value={pollQuestion}
+                    onChange={(e) => setPollQuestion(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
+                  />
+                  <div className="space-y-2">
+                    {pollOptions.map((opt, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder={`Option ${idx + 1}`}
+                          value={opt}
+                          onChange={(e) => {
+                            const next = [...pollOptions];
+                            next[idx] = e.target.value;
+                            setPollOptions(next);
+                          }}
+                          className="flex-1 px-3 py-2 rounded-md bg-gray-800 border border-gray-700 focus:outline-none"
+                        />
+                        {pollOptions.length > 2 && (
+                          <button
+                            onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                            className="px-2 py-1 rounded-md border border-rose-400/60 text-rose-200"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {pollOptions.length < 5 && (
+                      <button
+                        onClick={() => {
+                          setPollOptions([...pollOptions, ""]);
+                          setTimeout(() => {
+                            const inputs = document.querySelectorAll<HTMLInputElement>("input[placeholder^='Option']");
+                            inputs[inputs.length - 1]?.focus();
+                          }, 0);
+                        }}
+                        className="w-full px-3 py-2 rounded-md border border-sky-400/60 text-sky-200"
+                      >
+                        Add Option
+                      </button>
+                    )}
+                  </div>
+                  <button onClick={onCreatePoll} className="w-full px-3 py-2 rounded-md border border-sky-400/60 text-sky-200">Create Poll</button>
+                </div>
+              )}
               <Notifications message={notice} tone="error" />
-              {/* Recent polls list (admin only) */}
+              {/* Recent polls list (admin only), below the Create button */}
               {(pollHistory && pollHistory.length > 0) && (
                 <div className="mt-4 space-y-2">
                   <p className="text-sm text-sky-400">Recent Polls</p>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {pollHistory.map((p, idx) => (
-                      <div key={idx} className="p-2 rounded-md border border-sky-500/30 bg-[#0b1220]">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-sky-200 line-clamp-2">{p.question}</span>
-                          {onRestartPoll && (
-                            <button onClick={() => onRestartPoll(idx)} className="px-2 py-1 rounded-md border border-emerald-400/60 text-emerald-200 text-xs">Restart</button>
-                          )}
+                    {pollHistory.map((p, idx) => {
+                      const pct = (p.totalEligible && p.totalEligible > 0)
+                        ? Math.round(((p.votersCount || 0) / p.totalEligible) * 100)
+                        : undefined;
+                      const label = typeof pct === 'number' ? `${pct}% users participated` : undefined;
+                      return (
+                        <div key={idx} className="p-2 rounded-md border border-sky-500/30 bg-[#0b1220]">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs text-sky-200 line-clamp-2">Poll: {pollHistory.length - idx}<br />{p.question}</span>
+                            {onRestartPoll && (
+                              <button onClick={() => onRestartPoll(idx)} className="px-2 py-1 rounded-md border border-emerald-400/60 text-emerald-200 text-xs">Restart Poll</button>
+                            )}
+                          </div>
+                          {label && <div className="text-[10px] text-sky-400 mt-1">{label}</div>}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -174,16 +238,23 @@ export function PollPanel({
                 <div className="mt-4 space-y-2">
                   <p className="text-sm text-sky-400">Recent Polls</p>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {pollHistory.map((p, idx) => (
-                      <div key={idx} className="p-2 rounded-md border border-sky-500/30 bg-[#0b1220]">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-sky-200 line-clamp-2">{p.question}</span>
-                          {onRestartPoll && (
-                            <button onClick={() => onRestartPoll(idx)} className="px-2 py-1 rounded-md border border-emerald-400/60 text-emerald-200 text-xs">Restart</button>
-                          )}
+                    {pollHistory.map((p, idx) => {
+                      const pct = (p.totalEligible && p.totalEligible > 0)
+                        ? Math.round(((p.votersCount || 0) / p.totalEligible) * 100)
+                        : undefined;
+                      const label = typeof pct === 'number' ? `${pct}% users participated` : undefined;
+                      return (
+                        <div key={idx} className="p-2 rounded-md border border-sky-500/30 bg-[#0b1220]">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs text-sky-200 line-clamp-2">Poll: {pollHistory.length - idx}<br />{p.question}</span>
+                            {onRestartPoll && (
+                              <button onClick={() => onRestartPoll(idx)} className="px-2 py-1 rounded-md border border-emerald-400/60 text-emerald-200 text-xs">Restart Poll</button>
+                            )}
+                          </div>
+                          {label && <div className="text-[10px] text-sky-400 mt-1">{label}</div>}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
