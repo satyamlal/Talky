@@ -9,7 +9,7 @@ export function PublicCard({ onJoinPublic }: Props) {
       <div className="flex flex-col sm:flex-row items-center gap-3">
         <button
           onClick={onJoinPublic}
-          className="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-semibold hover:from-cyan-300 hover:to-emerald-300"
+          className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-semibold hover:from-cyan-300 hover:to-emerald-300"
         >
           Join a Public Room
         </button>
