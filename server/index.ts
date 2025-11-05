@@ -709,12 +709,21 @@ wss.on("connection", (socket, req) => {
       const totalEligible = Math.max(0, usersInRoom.length - (adminPresent ? 1 : 0));
       const votersCount = poll.votesByUserId.size;
       if (totalEligible > 0 && votersCount >= totalEligible) {
-        // Notify and mark poll as ended (do not delete; keep visible)
+        // Notify and archive poll; remove from current so UI shows Recent Polls instead
         const msg = JSON.stringify({ type: "system", message: "Voting completed with 100% participation!" });
         allSockets.filter((u) => u.room === roomId).forEach((u) => {
           try { u.socket.send(msg); } catch {}
         });
-        poll.ended = true;
+        // archive snapshot with participation
+        if (!room.pollHistory) room.pollHistory = [];
+        room.pollHistory.push({
+          question: poll.question,
+          options: poll.options.map((o) => ({ text: o.text, votes: o.votes })),
+          endedAt: Date.now(),
+          votersCount,
+          totalEligible,
+        });
+        delete room.poll;
         broadcastPoll(roomId);
         return;
       }
@@ -733,7 +742,20 @@ wss.on("connection", (socket, req) => {
         return;
       }
       if (room.poll) {
-        room.poll.ended = true;
+        // archive snapshot with participation and remove current poll
+        const usersInRoom = allSockets.filter((u) => u.room === roomId);
+        const adminPresent = usersInRoom.some((u) => u.userId === room.adminUserId);
+        const totalEligible = Math.max(0, usersInRoom.length - (adminPresent ? 1 : 0));
+        const votersCount = room.poll.votesByUserId.size;
+        if (!room.pollHistory) room.pollHistory = [];
+        room.pollHistory.push({
+          question: room.poll.question,
+          options: room.poll.options.map((o) => ({ text: o.text, votes: o.votes })),
+          endedAt: Date.now(),
+          votersCount,
+          totalEligible,
+        });
+        delete room.poll;
       }
       broadcastPoll(roomId);
       return;

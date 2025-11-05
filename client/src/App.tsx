@@ -213,7 +213,9 @@ interface ChatMessage {
               if (sys.message) showLeftNotice(sys.message);
             }
           } else if (parsedMessage.type === "pollUpdated") {
-            setCurrentPoll(parsedMessage.poll);
+            // If a poll has ended, treat as no active poll and rely on history list
+            const p = parsedMessage.poll;
+            setCurrentPoll(p && !p.ended ? p : null);
             setPollHistory(parsedMessage.pollHistory || []);
           } else if (parsedMessage.type === "needVerification") {
             setShowVerifyModal(true);
